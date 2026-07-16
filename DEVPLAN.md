@@ -166,12 +166,15 @@ prisma/seed.js         — тестовые данные
 
 ## Этап 8 — Деплой
 
-- [ ] Создать базу на Neon (free tier) → `DATABASE_URL` в `.env`
-- [ ] В схеме: `provider = "postgresql"`, `url = env("DATABASE_URL")` → `prisma db push` → seed
-- [ ] Push в GitHub → импорт репозитория в Vercel → env-переменная DATABASE_URL → deploy
-- [ ] Защита паролем: простейший вариант — proxy.ts (бывший middleware) с Basic Auth, пароль в env `APP_PASSWORD`
-- [ ] Домен: купить (~$12/год, Porkbun/Namecheap), привязать в Vercel
+Решение: разворачиваем **полностью бесплатно**, домен не покупаем — адрес будет `*.vercel.app`.
+
+- [x] Защита паролем: `src/proxy.ts` + `APP_PASSWORD`. В Next 16 middleware переименован в `proxy`, рантайм nodejs (не edge), поэтому доступен `Buffer`. Сравнение за постоянное время. Проверено curl: нет пароля → 401 + `WWW-Authenticate`, неверный → 401, верный → 200, логин любой. Без переменной → открыто
+- [x] `postinstall: prisma generate` — без него сборка на Vercel падает без клиента
+- [x] Предохранитель сида: на удалённой базе требует `--force`
+- [x] База на Neon (free, Frankfurt, Postgres 18), схема переведена на `postgresql` + `env("DATABASE_URL")`, `prisma db push` + сид выполнены. Локальный `prisma/dev.db` удалён — SQLite больше не используется нигде
+- [ ] Импорт репозитория в Vercel → переменные `DATABASE_URL` и `APP_PASSWORD` → deploy
 - [ ] Полный прогон приёмочных сценариев на проде
+- [ ] ~~Домен~~ — отложен до продажи продукта. Прикручивается в Vercel за 5 минут, ничего переделывать не нужно
 
 ## После MVP (не начинать без решения пользователя)
 
