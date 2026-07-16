@@ -6,6 +6,7 @@ import {
   isOverdue,
   dealMargin,
   CAR_STATUS,
+  CAR_STATUS_ORDER,
   DEAL_STAGES,
   STAGE_LABEL,
   DEAL_TYPE,
@@ -18,7 +19,7 @@ export default async function Dashboard() {
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const [cars, activeDeals, doneDealsMonth, openTasks] = await Promise.all([
+  const [cars, activeDeals, doneDealsMonth, openTasks, dealsTotal, tasksTotal] = await Promise.all([
     prisma.car.findMany({ include: { expenses: true } }),
     prisma.deal.findMany({
       where: { stage: { notIn: ["DONE", "LOST"] } },
@@ -35,7 +36,14 @@ export default async function Dashboard() {
       where: { done: false },
       include: { client: true, car: true },
     }),
+    // Счётчики нужны, чтобы отличить «ничего не заведено» от «всё закрыто»:
+    // тексты и подсказки в пустых блоках должны быть разными.
+    prisma.deal.count(),
+    prisma.task.count(),
   ]);
+
+  const hasDeals = dealsTotal > 0;
+  const hasTasks = tasksTotal > 0;
 
   // Сначала задачи со сроком (по возрастанию — просроченные первыми), затем бессрочные.
   const tasks = [...openTasks]
@@ -124,6 +132,13 @@ export default async function Dashboard() {
               Все сделки →
             </Link>
           </div>
+          {activeDeals.length === 0 && (
+            <p className="mb-3 text-[13px] text-muted">
+              {hasDeals
+                ? "Сейчас в воронке пусто — активных сделок нет."
+                : "Воронка заполнится, когда появятся первые сделки."}
+            </p>
+          )}
           <div className="flex flex-col gap-3">
             {stageCounts.map((s) => (
               <div key={s.key} className="flex items-center gap-3">
@@ -160,7 +175,19 @@ export default async function Dashboard() {
               </Link>
             ))}
             {activeDeals.length === 0 && (
-              <p className="py-3 text-sm text-muted">Активных сделок нет.</p>
+              <div className="py-3">
+                <p className="text-sm text-muted">
+                  {hasDeals
+                    ? "Активных сделок нет — все закрыты или потеряны."
+                    : "Сделок пока нет."}
+                </p>
+                <Link
+                  href="/deals"
+                  className="mt-1.5 inline-block text-[13px] font-semibold text-accent hover:underline"
+                >
+                  Создать сделку →
+                </Link>
+              </div>
             )}
           </div>
         </div>
@@ -193,23 +220,60 @@ export default async function Dashboard() {
                   </div>
                 </div>
               ))}
-              {tasks.length === 0 && <p className="text-sm text-muted">Все задачи закрыты 🎉</p>}
+              {tasks.length === 0 && (
+                <div>
+                  <p className="text-sm text-muted">
+                    {hasTasks ? "Все задачи закрыты 🎉" : "Задач пока нет."}
+                  </p>
+                  <Link
+                    href="/tasks"
+                    className="mt-1.5 inline-block text-[13px] font-semibold text-accent hover:underline"
+                  >
+                    {hasTasks ? "К задачам →" : "Завести напоминание →"}
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="panel animate-in delay-5 p-5">
-            <h2 className="mb-4 text-[15px] font-bold">Склад</h2>
-            <div className="flex flex-col gap-2.5">
-              {["AVAILABLE", "PREP", "RESERVED", "SOLD"].map((st) => {
-                const n = cars.filter((c) => c.status === st).length;
-                return (
-                  <div key={st} className="flex items-center justify-between">
-                    <span className={`chip ${CAR_STATUS[st].cls}`}>{CAR_STATUS[st].label}</span>
-                    <span className="mono text-[15px] font-bold">{n}</span>
-                  </div>
-                );
-              })}
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-[15px] font-bold">Склад</h2>
+              {cars.length > 0 && (
+                <Link href="/cars" className="text-[13px] font-semibold text-accent hover:underline">
+                  Все →
+                </Link>
+              )}
             </div>
+            {cars.length === 0 ? (
+              <div>
+                <p className="text-sm text-muted">На складе пока нет автомобилей.</p>
+                <Link
+                  href="/cars/new"
+                  className="mt-1.5 inline-block text-[13px] font-semibold text-accent hover:underline"
+                >
+                  Добавить первое авто →
+                </Link>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2.5">
+                {CAR_STATUS_ORDER.map((st) => {
+                  const n = cars.filter((c) => c.status === st).length;
+                  return (
+                    <Link
+                      key={st}
+                      href={`/cars?status=${st}`}
+                      className="flex items-center justify-between rounded-md px-1 py-0.5 transition-colors hover:bg-white/[0.03]"
+                    >
+                      <span className={`chip ${CAR_STATUS[st].cls}`}>{CAR_STATUS[st].label}</span>
+                      <span className={`mono text-[15px] font-bold ${n === 0 ? "text-muted/40" : ""}`}>
+                        {n}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
