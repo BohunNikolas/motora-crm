@@ -1,65 +1,212 @@
-import Image from "next/image";
+import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+import {
+  fmtMoney,
+  fmtDate,
+  CAR_STATUS,
+  DEAL_STAGES,
+  STAGE_LABEL,
+  DEAL_TYPE,
+} from "@/lib/format";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Dashboard() {
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const [cars, activeDeals, doneDealsMonth, tasks] = await Promise.all([
+    prisma.car.findMany({ include: { expenses: true } }),
+    prisma.deal.findMany({
+      where: { stage: { notIn: ["DONE", "LOST"] } },
+      include: { client: true, car: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.deal.findMany({
+      where: { stage: "DONE", closedAt: { gte: monthStart }, type: { not: "PURCHASE" } },
+      include: { car: { include: { expenses: true } } },
+    }),
+    prisma.task.findMany({
+      where: { done: false },
+      include: { client: true, car: true },
+      orderBy: { dueDate: "asc" },
+      take: 6,
+    }),
+  ]);
+
+  const inStock = cars.filter((c) => c.status !== "SOLD");
+  const stockValue = inStock.reduce((s, c) => s + c.listPrice, 0);
+
+  const revenue = doneDealsMonth.reduce((s, d) => s + (d.amount ?? 0), 0);
+  const margin = doneDealsMonth.reduce((s, d) => {
+    if (!d.car) return s;
+    const cost = d.car.purchasePrice + d.car.expenses.reduce((a, e) => a + e.amount, 0);
+    return s + (d.amount ?? 0) - cost;
+  }, 0);
+
+  const pipelineValue = activeDeals.reduce((s, d) => s + (d.amount ?? 0), 0);
+
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  const isOverdue = (d: Date | null) => d && new Date(d) < new Date(new Date().setHours(0, 0, 0, 0));
+
+  const stageCounts = DEAL_STAGES.filter((s) => s.key !== "DONE").map((s) => ({
+    ...s,
+    count: activeDeals.filter((d) => d.stage === s.key).length,
+  }));
+  const maxCount = Math.max(1, ...stageCounts.map((s) => s.count));
+
+  const stats = [
+    {
+      label: "Авто в наличии",
+      value: String(inStock.length),
+      sub: `на ${fmtMoney(stockValue)}`,
+    },
+    {
+      label: "Сделки в работе",
+      value: String(activeDeals.length),
+      sub: `потенциал ${fmtMoney(pipelineValue)}`,
+    },
+    {
+      label: "Продано за месяц",
+      value: String(doneDealsMonth.length),
+      sub: `выручка ${fmtMoney(revenue)}`,
+    },
+    {
+      label: "Маржа за месяц",
+      value: fmtMoney(margin),
+      sub: revenue > 0 ? `${Math.round((margin / revenue) * 100)}% от выручки` : "нет продаж",
+      accent: true,
+    },
+  ];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div>
+      <header className="animate-in mb-8 flex items-end justify-between">
+        <div>
+          <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">
+            Дашборд
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="mt-1 text-sm text-muted">
+            {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="flex gap-2">
+          <Link href="/cars/new" className="btn btn-primary">+ Авто</Link>
+          <Link href="/deals" className="btn btn-ghost">Сделки</Link>
         </div>
-      </main>
+      </header>
+
+      <div className="mb-6 grid grid-cols-4 gap-4">
+        {stats.map((s, i) => (
+          <div key={s.label} className={`panel panel-hover animate-in delay-${i + 1} p-5`}>
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted">
+              {s.label}
+            </div>
+            <div className={`mono mt-2 text-[28px] font-bold leading-none ${s.accent ? "text-accent" : ""}`}>
+              {s.value}
+            </div>
+            <div className="mt-2 text-[13px] text-muted">{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-5 gap-4">
+        <div className="panel animate-in delay-3 col-span-3 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-[15px] font-bold">Воронка продаж</h2>
+            <Link href="/deals" className="text-[13px] font-semibold text-accent hover:underline">
+              Все сделки →
+            </Link>
+          </div>
+          <div className="flex flex-col gap-3">
+            {stageCounts.map((s) => (
+              <div key={s.key} className="flex items-center gap-3">
+                <div className="w-[92px] shrink-0 text-[13px] text-muted">{s.label}</div>
+                <div className="h-[26px] flex-1 overflow-hidden rounded-md bg-surface-2">
+                  <div
+                    className="flex h-full items-center rounded-md bg-gradient-to-r from-[rgba(242,163,60,0.25)] to-[rgba(242,163,60,0.55)] px-2 transition-all"
+                    style={{ width: s.count ? `${(s.count / maxCount) * 100}%` : "0%" }}
+                  />
+                </div>
+                <div className="mono w-6 text-right text-[14px] font-bold">{s.count}</div>
+              </div>
+            ))}
+          </div>
+
+          <h2 className="mb-3 mt-7 text-[15px] font-bold">Последние сделки</h2>
+          <div className="flex flex-col">
+            {activeDeals.slice(0, 5).map((d) => (
+              <Link
+                key={d.id}
+                href="/deals"
+                className="flex items-center justify-between border-b border-line py-2.5 last:border-none hover:bg-white/[0.02]"
+              >
+                <div>
+                  <span className="text-[14px] font-semibold">{d.client.name}</span>
+                  <span className="ml-2 text-[13px] text-muted">
+                    {d.car ? `${d.car.make} ${d.car.model}` : DEAL_TYPE[d.type]}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {d.amount ? <span className="mono text-[13px]">{fmtMoney(d.amount)}</span> : null}
+                  <span className="chip chip-blue">{STAGE_LABEL[d.stage]}</span>
+                </div>
+              </Link>
+            ))}
+            {activeDeals.length === 0 && (
+              <p className="py-3 text-sm text-muted">Активных сделок нет.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="col-span-2 flex flex-col gap-4">
+          <div className="panel animate-in delay-4 p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-[15px] font-bold">Задачи</h2>
+              <Link href="/tasks" className="text-[13px] font-semibold text-accent hover:underline">
+                Все →
+              </Link>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {tasks.map((t) => (
+                <div key={t.id} className="flex items-start gap-2.5">
+                  <div
+                    className={`mt-[5px] h-2 w-2 shrink-0 rounded-full ${
+                      isOverdue(t.dueDate) ? "bg-red" : "bg-accent"
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate text-[14px] font-medium">{t.title}</div>
+                    <div className="text-[12px] text-muted">
+                      {t.dueDate ? fmtDate(t.dueDate) : "без срока"}
+                      {t.client ? ` · ${t.client.name}` : ""}
+                      {t.car ? ` · ${t.car.make} ${t.car.model}` : ""}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {tasks.length === 0 && <p className="text-sm text-muted">Все задачи закрыты 🎉</p>}
+            </div>
+          </div>
+
+          <div className="panel animate-in delay-5 p-5">
+            <h2 className="mb-4 text-[15px] font-bold">Склад</h2>
+            <div className="flex flex-col gap-2.5">
+              {["AVAILABLE", "PREP", "RESERVED", "SOLD"].map((st) => {
+                const n = cars.filter((c) => c.status === st).length;
+                return (
+                  <div key={st} className="flex items-center justify-between">
+                    <span className={`chip ${CAR_STATUS[st].cls}`}>{CAR_STATUS[st].label}</span>
+                    <span className="mono text-[15px] font-bold">{n}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
