@@ -47,7 +47,11 @@ prisma/seed.js         — тестовые данные
 - [x] Prisma 6 + SQLite, схема, `prisma db push`
 - [x] Git-репозиторий (создан `create-next-app`), ветка `main`, локальный `user.name/email` настроен
 - [x] Коммит этапов 0-1 (`a83168d`); `.gitignore` исключает `prisma/*.db`
-- [ ] Приватный репозиторий GitHub, push — **БЛОКЕР: нужна авторизация пользователя** (`gh` не установлен; либо пользователь создаёт репозиторий вручную и даёт remote URL)
+- [x] Приватный репозиторий GitHub: **https://github.com/BohunNikolas/motora-crm** (private), `main` → `origin/main`
+- [x] `gh` 2.96.0 установлен в `~/.local/gh`, аккаунт `BohunNikolas`, креды в keyring, `gh auth setup-git` выполнен
+- [x] `~/.zshrc` создан: node и gh добавлены в PATH пользователя
+
+**Этап 0 закрыт полностью.**
 
 ## Этап 1 — Каркас и дизайн-система
 
