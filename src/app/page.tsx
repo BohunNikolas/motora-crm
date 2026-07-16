@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   fmtMoney,
   fmtDate,
+  dealMargin,
   CAR_STATUS,
   DEAL_STAGES,
   STAGE_LABEL,
@@ -39,11 +40,7 @@ export default async function Dashboard() {
   const stockValue = inStock.reduce((s, c) => s + c.listPrice, 0);
 
   const revenue = doneDealsMonth.reduce((s, d) => s + (d.amount ?? 0), 0);
-  const margin = doneDealsMonth.reduce((s, d) => {
-    if (!d.car) return s;
-    const cost = d.car.purchasePrice + d.car.expenses.reduce((a, e) => a + e.amount, 0);
-    return s + (d.amount ?? 0) - cost;
-  }, 0);
+  const margin = doneDealsMonth.reduce((s, d) => s + (dealMargin(d.amount, d.car) ?? 0), 0);
 
   const pipelineValue = activeDeals.reduce((s, d) => s + (d.amount ?? 0), 0);
 
@@ -126,7 +123,7 @@ export default async function Dashboard() {
                 <div className="w-[92px] shrink-0 text-[13px] text-muted">{s.label}</div>
                 <div className="h-[26px] flex-1 overflow-hidden rounded-md bg-surface-2">
                   <div
-                    className="flex h-full items-center rounded-md bg-gradient-to-r from-[rgba(242,163,60,0.25)] to-[rgba(242,163,60,0.55)] px-2 transition-all"
+                    className="h-full rounded-md bg-gradient-to-r from-[rgba(242,163,60,0.25)] to-[rgba(242,163,60,0.55)] transition-all"
                     style={{ width: s.count ? `${(s.count / maxCount) * 100}%` : "0%" }}
                   />
                 </div>

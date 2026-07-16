@@ -41,6 +41,29 @@ export async function createCar(fd: FormData) {
   redirect(`/cars/${car.id}`);
 }
 
+export async function updateCar(id: string, fd: FormData) {
+  await prisma.car.update({
+    where: { id },
+    data: {
+      make: str(fd, "make") ?? "—",
+      model: str(fd, "model") ?? "—",
+      year: num(fd, "year") ?? new Date().getFullYear(),
+      mileage: num(fd, "mileage") ?? 0,
+      vin: str(fd, "vin"),
+      color: str(fd, "color"),
+      transmission: str(fd, "transmission"),
+      fuel: str(fd, "fuel"),
+      engineVol: str(fd, "engineVol") ? parseFloat(str(fd, "engineVol")!.replace(",", ".")) : null,
+      purchasePrice: num(fd, "purchasePrice") ?? 0,
+      listPrice: num(fd, "listPrice") ?? 0,
+      status: str(fd, "status") ?? "PREP",
+      notes: str(fd, "notes"),
+    },
+  });
+  revalidateAll();
+  redirect(`/cars/${id}`);
+}
+
 export async function setCarStatus(id: string, status: string) {
   await prisma.car.update({ where: { id }, data: { status } });
   revalidateAll();

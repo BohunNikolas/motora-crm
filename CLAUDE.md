@@ -32,6 +32,7 @@ Next.js 16 + TypeScript + Tailwind v4 + Prisma 6 + SQLite. Без сторонн
 
 ## Дизайн-система (не отступать)
 
+- **КРИТИЧНО: любой новый CSS-класс писать внутри `@layer base` или `@layer components`.** Tailwind v4 держит утилиты в слое `utilities`, а неслоёный CSS перебивает любой слой. Класс `.field { width: 100% }` вне слоя молча ломает `w-[130px]`, `px-*`, `text-*` на том же элементе — баг незаметный, ловится только замером в браузере.
 - Тёмная тема, фон `#0a0b0d`, акцент — янтарный `#f2a33c`. Все токены — CSS-переменные в `globals.css`.
 - Шрифты через `next/font`: Manrope (текст), Unbounded (заголовки/лого, класс `font-[family-name:var(--font-unbounded)]`), JetBrains Mono (числа/VIN/деньги, класс `mono`).
 - Готовые классы: `.panel`, `.panel-hover`, `.chip chip-green|amber|blue|red|muted`, `.field`, `.label`, `.btn btn-primary|ghost|danger`, `.table`, `.animate-in delay-1..5`.

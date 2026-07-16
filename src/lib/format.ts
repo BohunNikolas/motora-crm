@@ -6,6 +6,34 @@ export const fmtDate = (d: Date | string) =>
 export const fmtDateFull = (d: Date | string) =>
   new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
 
+// ─── Экономика авто (единственный источник истины) ──────────────
+// Себестоимость = закупка + все расходы на подготовку.
+// Ожидаемая маржа = цена продажи − себестоимость.
+// Фактическая маржа = сумма сделки − себестоимость.
+
+type CarCost = { purchasePrice: number; expenses: { amount: number }[] };
+
+export const carCost = (car: CarCost) =>
+  car.purchasePrice + car.expenses.reduce((s, e) => s + e.amount, 0);
+
+export const carMargin = (car: CarCost & { listPrice: number }) =>
+  car.listPrice - carCost(car);
+
+export const dealMargin = (amount: number | null, car: CarCost | null) =>
+  car && amount != null ? amount - carCost(car) : null;
+
+/** Наценка к себестоимости в процентах */
+export const markupPct = (car: CarCost & { listPrice: number }) => {
+  const cost = carCost(car);
+  return cost > 0 ? Math.round((carMargin(car) / cost) * 100) : 0;
+};
+
+// ─── Справочники ────────────────────────────────────────────────
+
+export const TRANSMISSIONS = ["АКПП", "МКПП", "Робот", "Вариатор"];
+export const FUELS = ["Бензин", "Дизель", "Гибрид", "Электро", "Газ/бензин"];
+export const SOURCES = ["Авито", "Авто.ру", "Рекомендация", "Сайт", "Проходящий", "Другое"];
+
 export const CAR_STATUS: Record<string, { label: string; cls: string }> = {
   PREP: { label: "Подготовка", cls: "chip-amber" },
   AVAILABLE: { label: "В наличии", cls: "chip-green" },
