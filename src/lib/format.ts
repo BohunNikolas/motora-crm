@@ -6,6 +6,41 @@ export const fmtDate = (d: Date | string) =>
 export const fmtDateFull = (d: Date | string) =>
   new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
 
+// ─── Сроки (единственный источник истины) ───────────────────────
+// Срок задачи — это календарный день, а не момент времени.
+// Поэтому всё сравнивается по локальной полуночи.
+
+export const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+export const isOverdue = (due: Date | null) => !!due && new Date(due) < startOfToday();
+
+/** Русское склонение: 1 день, 2 дня, 5 дней */
+const plural = (n: number, forms: [string, string, string]) => {
+  const n10 = n % 10;
+  const n100 = n % 100;
+  if (n10 === 1 && n100 !== 11) return forms[0];
+  if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) return forms[1];
+  return forms[2];
+};
+
+/** Человеческий срок: «сегодня», «завтра», «просрочено на 3 дня» */
+export const dueLabel = (due: Date | null) => {
+  if (!due) return "без срока";
+  const d = new Date(due);
+  d.setHours(0, 0, 0, 0);
+  const days = Math.round((d.getTime() - startOfToday().getTime()) / 86_400_000);
+  if (days === 0) return "сегодня";
+  if (days === 1) return "завтра";
+  if (days === -1) return "вчера";
+  if (days < 0) return `просрочено на ${-days} ${plural(-days, ["день", "дня", "дней"])}`;
+  if (days <= 7) return `через ${days} ${plural(days, ["день", "дня", "дней"])}`;
+  return fmtDate(due);
+};
+
 // ─── Экономика авто (единственный источник истины) ──────────────
 // Себестоимость = закупка + все расходы на подготовку.
 // Ожидаемая маржа = цена продажи − себестоимость.

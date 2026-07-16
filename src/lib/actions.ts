@@ -202,7 +202,10 @@ export async function createTask(fd: FormData) {
   await prisma.task.create({
     data: {
       title: str(fd, "title") ?? "Задача",
-      dueDate: due ? new Date(due) : null,
+      // <input type="date"> отдаёт "2026-07-17". new Date("2026-07-17") — это ПОЛНОЧЬ UTC,
+      // а срок задачи — календарный день по локальному времени. Без "T00:00:00" в поясах
+      // западнее UTC задача «на сегодня» сразу попадала бы в просроченные.
+      dueDate: due ? new Date(`${due}T00:00:00`) : null,
       clientId: str(fd, "clientId"),
       carId: str(fd, "carId"),
     },

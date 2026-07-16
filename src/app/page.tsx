@@ -2,7 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import {
   fmtMoney,
-  fmtDate,
+  dueLabel,
+  isOverdue,
   dealMargin,
   CAR_STATUS,
   DEAL_STAGES,
@@ -17,7 +18,7 @@ export default async function Dashboard() {
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const [cars, activeDeals, doneDealsMonth, tasks] = await Promise.all([
+  const [cars, activeDeals, doneDealsMonth, openTasks] = await Promise.all([
     prisma.car.findMany({ include: { expenses: true } }),
     prisma.deal.findMany({
       where: { stage: { notIn: ["DONE", "LOST"] } },
@@ -28,13 +29,23 @@ export default async function Dashboard() {
       where: { stage: "DONE", closedAt: { gte: monthStart }, type: { not: "PURCHASE" } },
       include: { car: { include: { expenses: true } } },
     }),
+    // Без take/orderBy по dueDate: SQLite ставит NULL первыми, и бессрочные задачи
+    // вытеснили бы просроченные из списка. Сортируем в JS — срочное наверх, «без срока» вниз.
     prisma.task.findMany({
       where: { done: false },
       include: { client: true, car: true },
-      orderBy: { dueDate: "asc" },
-      take: 6,
     }),
   ]);
+
+  // Сначала задачи со сроком (по возрастанию — просроченные первыми), затем бессрочные.
+  const tasks = [...openTasks]
+    .sort((a, b) => {
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    })
+    .slice(0, 6);
 
   const inStock = cars.filter((c) => c.status !== "SOLD");
   const stockValue = inStock.reduce((s, c) => s + c.listPrice, 0);
@@ -43,10 +54,6 @@ export default async function Dashboard() {
   const margin = doneDealsMonth.reduce((s, d) => s + (dealMargin(d.amount, d.car) ?? 0), 0);
 
   const pipelineValue = activeDeals.reduce((s, d) => s + (d.amount ?? 0), 0);
-
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  const isOverdue = (d: Date | null) => d && new Date(d) < new Date(new Date().setHours(0, 0, 0, 0));
 
   const stageCounts = DEAL_STAGES.filter((s) => s.key !== "DONE").map((s) => ({
     ...s,
@@ -177,7 +184,9 @@ export default async function Dashboard() {
                   <div className="min-w-0">
                     <div className="truncate text-[14px] font-medium">{t.title}</div>
                     <div className="text-[12px] text-muted">
-                      {t.dueDate ? fmtDate(t.dueDate) : "без срока"}
+                      <span className={isOverdue(t.dueDate) ? "font-semibold text-red" : ""}>
+                        {dueLabel(t.dueDate)}
+                      </span>
                       {t.client ? ` · ${t.client.name}` : ""}
                       {t.car ? ` · ${t.car.make} ${t.car.model}` : ""}
                     </div>

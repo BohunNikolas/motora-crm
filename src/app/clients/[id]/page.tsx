@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
 import { deleteClient } from "@/lib/actions";
-import { fmtMoney, fmtDate, CLIENT_TYPE, STAGE_LABEL, DEAL_TYPE } from "@/lib/format";
+import { fmtMoney, fmtDate, dueLabel, isOverdue, CLIENT_TYPE, STAGE_LABEL, DEAL_TYPE } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -28,8 +28,6 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
 
   const activeDeals = client.deals.filter((d) => !["DONE", "LOST"].includes(d.stage));
   const openTasks = client.tasks.filter((t) => !t.done);
-  const isOverdue = (d: Date | null) =>
-    d && new Date(d) < new Date(new Date().setHours(0, 0, 0, 0));
 
   const contacts: [string, React.ReactNode][] = [
     ["Телефон", <a key="p" href={`tel:${client.phone.replace(/[^\d+]/g, "")}`} className="mono hover:text-accent">{client.phone}</a>],
@@ -162,8 +160,12 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                     <div className={`text-[14px] ${t.done ? "text-muted line-through" : "font-medium"}`}>
                       {t.title}
                     </div>
-                    <div className="text-[12px] text-muted">
-                      {t.dueDate ? fmtDate(t.dueDate) : "без срока"}
+                    <div
+                      className={`text-[12px] ${
+                        !t.done && isOverdue(t.dueDate) ? "font-semibold text-red" : "text-muted"
+                      }`}
+                    >
+                      {dueLabel(t.dueDate)}
                     </div>
                   </div>
                 </div>
