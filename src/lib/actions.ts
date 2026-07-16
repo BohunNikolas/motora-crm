@@ -152,6 +152,9 @@ export async function moveDealStage(id: string, dir: 1 | -1) {
   if (!deal) return;
   const order = DEAL_STAGES.map((s) => s.key);
   const idx = order.indexOf(deal.stage);
+  // LOST не входит в воронку (idx === -1): стрелка утащила бы сделку в NEW молча.
+  // Для возврата в работу есть reopenDeal.
+  if (idx === -1) return;
   const next = order[Math.min(Math.max(idx + dir, 0), order.length - 1)];
   if (next === deal.stage) return;
 
@@ -171,7 +174,19 @@ export async function moveDealStage(id: string, dir: 1 | -1) {
 }
 
 export async function loseDeal(id: string) {
+  const deal = await prisma.deal.findUnique({ where: { id } });
+  if (!deal) return;
   await prisma.deal.update({ where: { id }, data: { stage: "LOST", closedAt: new Date() } });
+  // Сделку теряют уже после закрытия — освобождаем авто обратно на склад.
+  if (deal.stage === "DONE" && deal.carId && deal.type !== "PURCHASE") {
+    await prisma.car.update({ where: { id: deal.carId }, data: { status: "AVAILABLE" } });
+  }
+  revalidateAll();
+}
+
+/** Вернуть потерянную сделку в работу — в начало воронки. */
+export async function reopenDeal(id: string) {
+  await prisma.deal.update({ where: { id }, data: { stage: "NEW", closedAt: null } });
   revalidateAll();
 }
 
