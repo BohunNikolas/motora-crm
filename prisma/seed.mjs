@@ -12,6 +12,19 @@ import { PrismaClient } from "@prisma/client";
 
 const p = new PrismaClient();
 
+// Предохранитель: сид стирает базу целиком. На локальной это норма, на боевой —
+// катастрофа. Поэтому для удалённой базы требуем явный флаг --force.
+const url = process.env.DATABASE_URL ?? "file:./dev.db";
+const isLocal =
+  url.startsWith("file:") || url.includes("localhost") || url.includes("127.0.0.1");
+
+if (!isLocal && !process.argv.includes("--force")) {
+  console.error("⛔ DATABASE_URL указывает на удалённую базу.");
+  console.error("   Сид УДАЛИТ из неё все данные: авто, клиентов, сделки, задачи.");
+  console.error("   Если это точно то, что нужно: npm run seed -- --force");
+  process.exit(1);
+}
+
 const day = (offset) => {
   const d = new Date();
   d.setHours(12, 0, 0, 0);
