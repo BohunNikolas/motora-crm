@@ -134,23 +134,31 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
               </div>
             )}
 
-            <form action={addExpense.bind(null, car.id)} className="flex gap-2">
-              <input name="title" required className="field flex-1" placeholder="Замена колодок" />
-              <input
-                name="amount"
-                type="number"
-                required
-                min={0}
-                className="field mono w-[130px]"
-                placeholder="250"
-              />
-              <button type="submit" className="btn btn-ghost">+ Расход</button>
-            </form>
-            {car.expenses.length === 0 && (
-              <p className="mt-3 text-[13px] text-muted">
-                Пока расходов нет. Химчистка, ремонт, детейлинг — всё, что вошло в подготовку авто.
+            <div className="rounded-xl border border-line bg-surface-2 p-4">
+              <div className="label mb-2.5">Добавить расход</div>
+              <form action={addExpense.bind(null, car.id)} className="flex gap-2">
+                <input
+                  name="title"
+                  required
+                  className="field flex-1 bg-surface"
+                  placeholder="Замена колодок"
+                />
+                <input
+                  name="amount"
+                  type="number"
+                  required
+                  min={0}
+                  className="field mono w-[130px] bg-surface"
+                  placeholder="250"
+                />
+                <button type="submit" className="btn btn-primary">Добавить</button>
+              </form>
+              <p className="mt-2.5 text-[12px] text-muted">
+                {car.expenses.length === 0
+                  ? "Химчистка, ремонт, детейлинг — всё, что вошло в подготовку. Сразу попадёт в себестоимость и пересчитает маржу."
+                  : "Попадёт в себестоимость и пересчитает маржу."}
               </p>
-            )}
+            </div>
           </section>
 
           <section className="panel animate-in delay-3 p-5">

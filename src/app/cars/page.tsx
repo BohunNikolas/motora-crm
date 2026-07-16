@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { Cell } from "@/components/cell-link";
 import { fmtMoney, carCost, carMargin, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -118,38 +119,61 @@ export default async function CarsPage({
                   <th className="text-right">Цена</th>
                   <th className="text-right">Маржа</th>
                   <th>Статус</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {cars.map((c) => {
                   const expenses = c.expenses.reduce((s, e) => s + e.amount, 0);
                   const margin = carMargin(c);
+                  const href = `/cars/${c.id}`;
                   return (
-                    <tr key={c.id} className="cursor-pointer">
-                      <td>
-                        <Link href={`/cars/${c.id}`} className="block">
-                          <div className="font-semibold">
-                            {c.make} {c.model}
-                          </div>
-                          <div className="text-[12px] text-muted">
-                            {c.year} · {[c.transmission, c.fuel, c.color].filter(Boolean).join(" · ") || "—"}
-                          </div>
-                        </Link>
-                      </td>
-                      <td className="mono text-right text-muted">{c.mileage.toLocaleString("ru-RU")}</td>
-                      <td className="mono text-right">{fmtMoney(c.purchasePrice)}</td>
-                      <td className="mono text-right text-muted">
+                    <tr key={c.id}>
+                      <Cell href={href}>
+                        <div className="font-semibold">
+                          {c.make} {c.model}
+                        </div>
+                        <div className="text-[12px] text-muted">
+                          {c.year} · {[c.transmission, c.fuel, c.color].filter(Boolean).join(" · ") || "—"}
+                        </div>
+                      </Cell>
+                      <Cell href={href} className="mono text-right text-muted">
+                        {c.mileage.toLocaleString("ru-RU")}
+                      </Cell>
+                      <Cell href={href} className="mono text-right">
+                        {fmtMoney(c.purchasePrice)}
+                      </Cell>
+                      <Cell href={href} className="mono text-right text-muted">
                         {expenses ? fmtMoney(expenses) : "—"}
-                      </td>
-                      <td className="mono text-right">{fmtMoney(carCost(c))}</td>
-                      <td className="mono text-right">{fmtMoney(c.listPrice)}</td>
-                      <td className={`mono text-right font-bold ${margin >= 0 ? "text-green" : "text-red"}`}>
+                      </Cell>
+                      <Cell href={href} className="mono text-right">
+                        {fmtMoney(carCost(c))}
+                      </Cell>
+                      <Cell href={href} className="mono text-right">
+                        {fmtMoney(c.listPrice)}
+                      </Cell>
+                      <Cell
+                        href={href}
+                        className={`mono text-right font-bold ${margin >= 0 ? "text-green" : "text-red"}`}
+                      >
                         {fmtMoney(margin)}
-                      </td>
-                      <td>
+                      </Cell>
+                      <Cell href={href}>
                         <span className={`chip ${CAR_STATUS[c.status]?.cls ?? "chip-muted"}`}>
                           {CAR_STATUS[c.status]?.label ?? c.status}
                         </span>
+                      </Cell>
+                      <td className="w-px whitespace-nowrap">
+                        <Link
+                          href={`${href}/edit`}
+                          title={`Редактировать ${c.make} ${c.model}`}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-accent"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                            <path d="m15 5 4 4" />
+                          </svg>
+                        </Link>
                       </td>
                     </tr>
                   );

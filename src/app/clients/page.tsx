@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { Cell } from "@/components/cell-link";
 import { ClientFields } from "@/components/client-form";
 import { createClient } from "@/lib/actions";
 import { fmtDate, CLIENT_TYPE } from "@/lib/format";
@@ -112,34 +113,55 @@ export default async function ClientsPage({
                   <th>Источник</th>
                   <th className="text-right">Сделок</th>
                   <th className="text-right">Добавлен</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {clients.map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <Link href={`/clients/${c.id}`} className="block">
+                {clients.map((c) => {
+                  const href = `/clients/${c.id}`;
+                  return (
+                    <tr key={c.id}>
+                      <Cell href={href}>
                         <div className="font-semibold">{c.name}</div>
                         {c.notes && (
                           <div className="max-w-[320px] truncate text-[12px] text-muted">{c.notes}</div>
                         )}
-                      </Link>
-                    </td>
-                    <td className="mono text-[13px]">
-                      <a href={`tel:${c.phone.replace(/[^\d+]/g, "")}`} className="hover:text-accent">
-                        {c.phone}
-                      </a>
-                    </td>
-                    <td>
-                      <span className={`chip ${TYPE_CLS[c.type] ?? "chip-muted"}`}>
-                        {CLIENT_TYPE[c.type] ?? c.type}
-                      </span>
-                    </td>
-                    <td className="text-[13px] text-muted">{c.source ?? "—"}</td>
-                    <td className="mono text-right">{c._count.deals || "—"}</td>
-                    <td className="text-right text-[13px] text-muted">{fmtDate(c.createdAt)}</td>
-                  </tr>
-                ))}
+                      </Cell>
+                      {/* Телефон — ссылка на звонок, а не на карточку: ссылку в ссылку не вложить */}
+                      <td className="mono whitespace-nowrap text-[13px]">
+                        <a href={`tel:${c.phone.replace(/[^\d+]/g, "")}`} className="hover:text-accent">
+                          {c.phone}
+                        </a>
+                      </td>
+                      <Cell href={href}>
+                        <span className={`chip ${TYPE_CLS[c.type] ?? "chip-muted"}`}>
+                          {CLIENT_TYPE[c.type] ?? c.type}
+                        </span>
+                      </Cell>
+                      <Cell href={href} className="text-[13px] text-muted">
+                        {c.source ?? "—"}
+                      </Cell>
+                      <Cell href={href} className="mono text-right">
+                        {c._count.deals || "—"}
+                      </Cell>
+                      <Cell href={href} className="text-right text-[13px] text-muted">
+                        {fmtDate(c.createdAt)}
+                      </Cell>
+                      <td className="w-px whitespace-nowrap">
+                        <Link
+                          href={`${href}/edit`}
+                          title={`Редактировать: ${c.name}`}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-accent"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                            <path d="m15 5 4 4" />
+                          </svg>
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
