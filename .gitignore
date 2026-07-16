@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...но шаблон без секретов нужен в репозитории
+!.env.example
 
 # локальная база SQLite (данные восстанавливаются через prisma/seed.js)
 prisma/*.db
