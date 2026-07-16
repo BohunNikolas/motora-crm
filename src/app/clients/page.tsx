@@ -104,7 +104,8 @@ export default async function ClientsPage({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="table">
+            {/* min-w: иначе на узком окне колонки сплющиваются вместо горизонтального скролла */}
+            <table className="table min-w-[840px]">
               <thead>
                 <tr>
                   <th>Клиент</th>

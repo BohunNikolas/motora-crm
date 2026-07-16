@@ -108,7 +108,9 @@ export default async function CarsPage({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="table">
+            {/* min-w: без него width:100% сплющивает колонки на узком окне —
+                названия переносятся, строки раздуваются. Лучше честный скролл. */}
+            <table className="table min-w-[900px]">
               <thead>
                 <tr>
                   <th>Автомобиль</th>

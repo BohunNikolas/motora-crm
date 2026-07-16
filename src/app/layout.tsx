@@ -35,7 +35,9 @@ export default function RootLayout({
       className={`${manrope.variable} ${unbounded.variable} ${jbmono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <div className="flex min-h-screen">
+        {/* Сайдбар fixed — он вне потока, поэтому обёртке flex не нужен:
+            с ним main получал min-width:auto, не мог сжаться и распирал страницу вбок. */}
+        <div className="min-h-screen">
           <aside className="fixed inset-y-0 left-0 z-20 flex w-[228px] flex-col border-r border-line bg-surface/60 backdrop-blur-xl px-4 py-6">
             <div className="mb-8 flex items-center gap-2.5 px-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-accent text-[#16130c]">
@@ -59,7 +61,7 @@ export default function RootLayout({
               MVP v0.1
             </div>
           </aside>
-          <main className="ml-[228px] flex-1 px-8 py-8">
+          <main className="ml-[228px] px-8 py-8">
             <div className="mx-auto max-w-[1200px]">{children}</div>
           </main>
         </div>
