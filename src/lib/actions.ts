@@ -106,9 +106,27 @@ export async function createClient(fd: FormData) {
   revalidateAll();
 }
 
+export async function updateClient(id: string, fd: FormData) {
+  await prisma.client.update({
+    where: { id },
+    data: {
+      name: str(fd, "name") ?? "—",
+      phone: str(fd, "phone") ?? "—",
+      email: str(fd, "email"),
+      type: str(fd, "type") ?? "BUYER",
+      source: str(fd, "source"),
+      notes: str(fd, "notes"),
+    },
+  });
+  revalidateAll();
+  redirect(`/clients/${id}`);
+}
+
+// Внимание: сделки клиента удалятся каскадом (schema.prisma), задачи — отвяжутся (SetNull).
 export async function deleteClient(id: string) {
   await prisma.client.delete({ where: { id } });
   revalidateAll();
+  redirect("/clients");
 }
 
 // ─── Сделки ────────────────────────────────────────────────────
