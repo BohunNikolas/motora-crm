@@ -14,6 +14,7 @@ export type Role = "ADMIN" | "PARTNER" | "SALES" | "TECHNICAL" | "READ_ONLY";
 export type Capability =
   // Видимость
   | "see.acquisition" // закупка, einkauf24, Auktionsrechnung, закупочные счета, суммы расходов €
+  | "see.internalPrice" // внутренний Verkaufspreis e.U.→OG, результаты компаний (§9)
   | "see.margin" // маржа, Differenz-USt €, прибыль компаний, стоимость склада по закупке
   | "see.minPrice" // Mindestverkaufspreis
   | "see.salePrice" // Verkaufspreis / суммы сделок
@@ -43,7 +44,7 @@ export type Capability =
 
 const CAPS: Record<Role, Capability[]> = {
   ADMIN: [
-    "see.acquisition", "see.margin", "see.minPrice", "see.salePrice", "see.taxScheme",
+    "see.acquisition", "see.internalPrice", "see.margin", "see.minPrice", "see.salePrice", "see.taxScheme",
     "see.deals", "see.clientFull",
     "edit.car", "edit.carDescription", "edit.salePrice", "edit.minPrice", "edit.tech",
     "sell", "sell.belowMin",
@@ -52,7 +53,7 @@ const CAPS: Record<Role, Capability[]> = {
     "owner.change", "tax.change", "delete.any", "users.manage", "audit.view",
   ],
   PARTNER: [
-    "see.acquisition", "see.margin", "see.minPrice", "see.salePrice", "see.taxScheme",
+    "see.acquisition", "see.internalPrice", "see.margin", "see.minPrice", "see.salePrice", "see.taxScheme",
     "see.deals", "see.clientFull",
     "edit.car", "edit.carDescription", "edit.salePrice", "edit.minPrice",
     "sell", "sell.belowMin",
@@ -93,6 +94,7 @@ export function can(user: AuthUser | null, cap: Capability): boolean {
 export function viewerFlags(user: AuthUser | null) {
   return {
     seeAcquisition: can(user, "see.acquisition"),
+    seeInternalPrice: can(user, "see.internalPrice"),
     seeMargin: can(user, "see.margin"),
     seeMinPrice: can(user, "see.minPrice"),
     seeSalePrice: can(user, "see.salePrice"),

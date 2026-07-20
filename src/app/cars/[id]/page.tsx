@@ -12,12 +12,15 @@ import {
   sumMoney,
   carCost,
   carPlannedFinance,
+  ogAcquisitionBasis,
   markupPct,
   mhCode,
   internalCode,
   pickerlNeedsAttention,
   requiredDocs,
   isFinancialDoc,
+  isPartnerOwner,
+  supplierFinance,
   DOC_TYPES,
   DOC_TYPE_LABEL,
   CAR_STATUS,
@@ -27,6 +30,8 @@ import {
   STAGE_LABEL,
   DEAL_TYPE,
   TAX_SCHEME,
+  CURRENT_OWNER,
+  INTERNAL_INVOICE_PAYMENT,
   SERVICEHEFT,
   JA_NEIN_UNBEKANNT,
   BODY_PART_LABEL,
@@ -48,6 +53,7 @@ export default async function CarPage({
   // Redaction (roles-motorhof.md): запрещённые блоки НЕ рендерятся на сервере —
   // их цифр физически нет в HTML, который получает браузер.
   const seeMoney = can(user, "see.margin"); // экономика, расходы €, себестоимость
+  const seeInternal = can(user, "see.internalPrice"); // внутренняя продажа e.U.→OG (§9)
   const seeSalePrice = can(user, "see.salePrice");
   const seeExpenses = seeMoney || can(user, "edit.tech"); // TECHNICAL видит расходы по авто (свои сметы)
   const canAdd = can(user, "expense.add") || can(user, "expense.addPending");
@@ -88,6 +94,7 @@ export default async function CarPage({
   };
 
   const expensesTotal = sumMoney(car.expenses.map((e) => e.amountGross));
+  const ogBasis = ogAcquisitionBasis(car); // §9: для партнёрских авто = внутр. счёт
   const cost = carCost(car);
   const fin = carPlannedFinance(car);
   const margin = fin.finalMargin;
@@ -103,9 +110,14 @@ export default async function CarPage({
     ["Цвет", car.color ?? "—"],
     ["Владельцев", car.voranmeldungen != null ? String(car.voranmeldungen) : "неизв."],
     ["Ключей", car.keysCount != null ? String(car.keysCount) : "неизв."],
+    ["Владелец", CURRENT_OWNER[car.currentOwner] ?? car.currentOwner],
   ];
   const nachParts = car.nachlackierungenParts.map((p) => BODY_PART_LABEL[p] ?? p).join(", ");
   const pickerlAlert = pickerlNeedsAttention(car);
+
+  // Владелец и внутренняя продажа e.U. → OG (§9).
+  const isPartner = isPartnerOwner(car.currentOwner);
+  const supplierFin = seeInternal && isPartner ? supplierFinance(car) : null;
 
   return (
     <div>
@@ -155,6 +167,15 @@ export default async function CarPage({
         </div>
       )}
 
+      {/* §9: партнёрское авто продано без внутреннего счёта e.U.→OG — незавершённость видна всем. */}
+      {car.awaitingInternalInvoice && (
+        <div className="animate-in mb-4 rounded-xl border border-[rgba(242,163,60,0.4)] bg-[var(--accent-dim)] px-4 py-3 text-[14px]">
+          <b>Ожидает внутренний счёт e.U. → OG.</b> Авто продано, но фактический внутренний
+          Verkaufspreis и данные счёта ещё не подтверждены (§9). Внесите их в форме
+          редактирования, чтобы завершить внутреннюю продажу.
+        </div>
+      )}
+
       {/* Модалка предложения создать Pickerl-задачу (§8.4) — только сразу после
           сохранения (по query-параметру), не при каждом рендере. */}
       {pickerl === "ask" && can(user, "task.manage") && (
@@ -190,6 +211,81 @@ export default async function CarPage({
               </div>
             )}
           </section>
+
+          {/* Владелец и внутренняя продажа e.U. → OG (§9) — только see.internalPrice. */}
+          {seeInternal && isPartner && (
+            <section className="panel animate-in delay-1 p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-bold">Внутренняя продажа e.U. → OG</h2>
+                <div className="flex items-center gap-2">
+                  <span className="chip chip-muted">{CURRENT_OWNER[car.currentOwner] ?? car.currentOwner}</span>
+                  <span className={`chip ${car.internalInvoicePaymentStatus === "PAID" ? "chip-green" : "chip-amber"}`}>
+                    {INTERNAL_INVOICE_PAYMENT[car.internalInvoicePaymentStatus] ?? car.internalInvoicePaymentStatus}
+                  </span>
+                </div>
+              </div>
+
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[14px]">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Закупка поставщика</dt>
+                  <dd className="mono">{car.partnerPurchasePrice ? fmtMoney(car.partnerPurchasePrice) : "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Общая стоимость приобр.</dt>
+                  <dd className="mono">{car.partnerAcquisitionCost ? fmtMoney(car.partnerAcquisitionCost) : "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Внутр. Verkaufspreis (план)</dt>
+                  <dd className="mono">{car.plannedInternalTransferPrice ? fmtMoney(car.plannedInternalTransferPrice) : "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Внутр. Verkaufspreis (факт)</dt>
+                  <dd className="mono font-bold">{car.actualInternalTransferPrice ? fmtMoney(car.actualInternalTransferPrice) : "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">№ внутр. счёта</dt>
+                  <dd className="mono">{car.internalInvoiceNumber ?? "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Дата счёта</dt>
+                  <dd>{car.internalInvoiceDate ? fmtDate(car.internalInvoiceDate) : "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Режим внутр. счёта</dt>
+                  <dd>{car.internalInvoiceTaxScheme ? TAX_SCHEME[car.internalInvoiceTaxScheme] ?? car.internalInvoiceTaxScheme : "—"}</dd>
+                </div>
+              </dl>
+
+              {/* Два независимых результата — не смешивать (§9). */}
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-line bg-surface-2 p-4">
+                  <div className="label mb-1">Результат поставляющей компании</div>
+                  {supplierFin ? (
+                    <>
+                      <div className={`mono text-[20px] font-bold leading-none ${supplierFin.finalMargin.gte(0) ? "text-green" : "text-red"}`}>
+                        {fmtMoney(supplierFin.finalMargin)}
+                      </div>
+                      <div className="mt-1.5 text-[12px] text-muted">
+                        {supplierFin.taxScheme === "REGELBESTEUERUNG" ? "Ausgangs-USt" : "Differenz-USt"} {fmtMoney(supplierFin.vatAmount)}
+                        {!supplierFin.isConfirmed && " · режим не определён"}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-[13px] text-muted">Нет внутренней цены — результат не рассчитан.</div>
+                  )}
+                </div>
+                <div className="rounded-xl border border-line bg-surface-2 p-4">
+                  <div className="label mb-1">Результат MOTORHOF OG</div>
+                  <div className={`mono text-[20px] font-bold leading-none ${margin.gte(0) ? "text-green" : "text-red"}`}>
+                    {fmtMoney(margin)}
+                  </div>
+                  <div className="mt-1.5 text-[12px] text-muted">
+                    себестоимость от внутр. счёта · наценка {markup}%
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Техническая карта (§8.2–8.4) — видна всем вошедшим (техчасть). */}
           <section className="panel animate-in delay-2 p-5">
@@ -469,7 +565,7 @@ export default async function CarPage({
 
           {seeMoney && (
           <section className="panel animate-in delay-2 p-5">
-            <h2 className="mb-4 text-[15px] font-bold">Экономика</h2>
+            <h2 className="mb-4 text-[15px] font-bold">Экономика{isPartner ? " · MOTORHOF OG" : ""}</h2>
             <div className="mb-3 flex items-center justify-between text-[13px]">
               <span className="text-muted">Налоговый режим</span>
               <span className={fin.isConfirmed ? "" : "text-red"}>{TAX_SCHEME[car.taxScheme] ?? car.taxScheme}</span>
@@ -482,8 +578,8 @@ export default async function CarPage({
             )}
             <div className="flex flex-col gap-2.5 text-[14px]">
               <div className="flex justify-between">
-                <span className="text-muted">Закупка</span>
-                <span className="mono">{fmtMoney(car.purchasePrice)}</span>
+                <span className="text-muted">{isPartner ? "Внутр. счёт (база OG)" : "Закупка"}</span>
+                <span className="mono">{fmtMoney(ogBasis)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Расходы</span>

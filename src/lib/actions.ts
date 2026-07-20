@@ -11,6 +11,8 @@ import {
   SALES_STATUS_SET,
   TECH_STATUS_SET,
   pickerlNeedsAttention,
+  isPartnerOwner,
+  internalInvoiceComplete,
 } from "./format";
 
 // Заголовок автозадачи Pickerl — по нему ищем дубликаты (§8.4).
@@ -115,11 +117,51 @@ function carDataFromForm(fd: FormData) {
     // Налоги/закупка
     taxScheme: str(fd, "taxScheme") ?? "DIFFERENZBESTEUERUNG",
     purchaseChannel: str(fd, "purchaseChannel"),
-    currentOwner: str(fd, "currentOwner") ?? "MOTORHOF_OG",
     einkaufspreisGemaess24: money(fd, "einkaufspreisGemaess24") ?? purchasePrice,
     plannedSalePriceGross: money(fd, "plannedSalePriceGross") ?? listPrice,
     minimumSalePriceGross: money(fd, "minimumSalePriceGross"),
     arrivalDate: date(fd, "arrivalDate"),
+    // Владелец и внутренняя продажа e.U. → OG (§9). Партнёрские поля значимы только
+    // для Mriya/A Motors/AutoHub — для MOTORHOF_OG обнуляем, чтобы не смешивать данные.
+    ...ownerDataFromForm(fd),
+  };
+}
+
+/**
+ * Поля владельца/внутреннего счёта (§9). Для собственных авто OG партнёрские
+ * значения зануляются — «не смешивать результаты компаний».
+ */
+function ownerDataFromForm(fd: FormData) {
+  const currentOwner = str(fd, "currentOwner") ?? "MOTORHOF_OG";
+  if (!isPartnerOwner(currentOwner)) {
+    return {
+      currentOwner,
+      partnerPurchasePrice: null,
+      partnerAcquisitionCost: null,
+      plannedInternalTransferPrice: null,
+      actualInternalTransferPrice: null,
+      internalInvoiceNumber: null,
+      internalInvoiceDate: null,
+      internalInvoiceTaxScheme: null,
+      internalInvoicePaymentStatus: "OPEN",
+      awaitingInternalInvoice: false,
+    };
+  }
+  const actualInternalTransferPrice = money(fd, "actualInternalTransferPrice");
+  const internalInvoiceNumber = str(fd, "internalInvoiceNumber");
+  return {
+    currentOwner,
+    partnerPurchasePrice: money(fd, "partnerPurchasePrice"),
+    partnerAcquisitionCost: money(fd, "partnerAcquisitionCost"),
+    plannedInternalTransferPrice: money(fd, "plannedInternalTransferPrice"),
+    actualInternalTransferPrice,
+    internalInvoiceNumber,
+    internalInvoiceDate: date(fd, "internalInvoiceDate"),
+    internalInvoiceTaxScheme: str(fd, "internalInvoiceTaxScheme"),
+    internalInvoicePaymentStatus: str(fd, "internalInvoicePaymentStatus") ?? "OPEN",
+    // Внутренний счёт заполнили (цена + номер) → снимаем пометку «ожидает» (§9).
+    awaitingInternalInvoice:
+      actualInternalTransferPrice != null && !!internalInvoiceNumber ? false : undefined,
   };
 }
 
@@ -294,15 +336,28 @@ export async function setCarStatus(id: string, status: string) {
 
   const before = await prisma.car.findUnique({
     where: { id },
-    select: { status: true, parkingRow: true, parkingSpot: true },
+    select: {
+      status: true, parkingRow: true, parkingSpot: true,
+      currentOwner: true, actualInternalTransferPrice: true, internalInvoiceNumber: true,
+    },
   });
   if (!before) return;
 
   // Продажа освобождает активное парковочное место, история сохраняется (§18.2).
   const freeParking = status === "SOLD" && (before.parkingRow || before.parkingSpot != null);
+  // §9: продажа партнёрского авто без завершённого внутреннего счёта e.U.→OG →
+  // пометка «ожидает внутренний счёт» (статус остаётся SOLD, незавершённость видна).
+  const awaitingInvoice =
+    status === "SOLD" &&
+    isPartnerOwner(before.currentOwner) &&
+    !internalInvoiceComplete(before);
   await prisma.car.update({
     where: { id },
-    data: freeParking ? { status, parkingRow: null, parkingSpot: null } : { status },
+    data: {
+      status,
+      ...(freeParking ? { parkingRow: null, parkingSpot: null } : {}),
+      ...(status === "SOLD" ? { awaitingInternalInvoice: awaitingInvoice } : {}),
+    },
   });
   if (freeParking) {
     await prisma.parkingMove.create({
@@ -316,7 +371,11 @@ export async function setCarStatus(id: string, status: string) {
       },
     });
   }
-  await audit(user.id, "Car", id, "status", { before: { status: before.status }, after: { status } });
+  await audit(user.id, "Car", id, "status", {
+    before: { status: before.status },
+    after: { status, awaitingInternalInvoice: awaitingInvoice || undefined },
+    reason: awaitingInvoice ? "Партнёрское авто продано без внутреннего счёта e.U.→OG — ожидает счёт (§9)" : undefined,
+  });
   revalidateAll();
 }
 
@@ -522,7 +581,15 @@ export async function moveDealStage(id: string, dir: 1 | -1) {
     data: { stage: next, closedAt: closing ? new Date() : null },
   });
   if (closing && deal.carId && deal.type !== "PURCHASE") {
-    await prisma.car.update({ where: { id: deal.carId }, data: { status: "SOLD" } });
+    // §9: партнёрское авто без завершённого внутреннего счёта → пометка «ожидает».
+    const awaitingInvoice =
+      deal.car != null &&
+      isPartnerOwner(deal.car.currentOwner) &&
+      !internalInvoiceComplete(deal.car);
+    await prisma.car.update({
+      where: { id: deal.carId },
+      data: { status: "SOLD", awaitingInternalInvoice: awaitingInvoice },
+    });
   }
   if (!closing && deal.carId && deal.stage === "DONE") {
     // сделку вернули из "Закрыта" — авто снова в наличии

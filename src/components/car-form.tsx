@@ -8,12 +8,12 @@ import {
   TAX_SCHEME,
   TAX_SCHEME_ORDER,
   PURCHASE_CHANNEL,
-  CURRENT_OWNER,
   SERVICEHEFT,
   SERVICEHEFT_ORDER,
   JA_NEIN_UNBEKANNT,
   BODY_PARTS,
 } from "@/lib/format";
+import { CarOwnerFields } from "./car-owner-fields";
 
 export const CAR_FORM_ERRORS: Record<string, string> = {
   "pickerl-date": "Pickerl отмечен как «Да» — укажите Begutachtungsmonat и Begutachtungsjahr.",
@@ -239,12 +239,19 @@ export function CarForm({
               {Object.entries(PURCHASE_CHANNEL).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
             </select>
           </div>
-          <div>
-            <label className="label" htmlFor="currentOwner">Владелец</label>
-            <select id="currentOwner" name="currentOwner" defaultValue={car?.currentOwner ?? "MOTORHOF_OG"} className="field">
-              {Object.entries(CURRENT_OWNER).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-            </select>
-          </div>
+          <CarOwnerFields
+            defaults={{
+              currentOwner: car?.currentOwner ?? "MOTORHOF_OG",
+              partnerPurchasePrice: m(car?.partnerPurchasePrice),
+              partnerAcquisitionCost: m(car?.partnerAcquisitionCost),
+              plannedInternalTransferPrice: m(car?.plannedInternalTransferPrice),
+              actualInternalTransferPrice: m(car?.actualInternalTransferPrice),
+              internalInvoiceNumber: car?.internalInvoiceNumber ?? "",
+              internalInvoiceDate: dstr(car?.internalInvoiceDate),
+              internalInvoiceTaxScheme: car?.internalInvoiceTaxScheme ?? "",
+              internalInvoicePaymentStatus: car?.internalInvoicePaymentStatus ?? "OPEN",
+            }}
+          />
           <div>
             <label className="label" htmlFor="einkaufspreisGemaess24">Einkaufspreis §24 €</label>
             <input id="einkaufspreisGemaess24" name="einkaufspreisGemaess24" type="number" step="0.01" min={0} defaultValue={m(car?.einkaufspreisGemaess24)} className="field mono" placeholder="= закупке" />

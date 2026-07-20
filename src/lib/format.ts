@@ -90,27 +90,52 @@ export type CarForFinance = {
   einkaufspreisGemaess24: Prisma.Decimal | null;
   plannedSalePriceGross: Prisma.Decimal | null;
   expenses: CarExpenseLike[];
+  // §9: для партнёрских авто себестоимость MOTORHOF OG считается от внутреннего
+  // Verkaufspreis e.U.→OG (actual ?? planned), а НЕ от purchasePrice.
+  currentOwner: string;
+  actualInternalTransferPrice: Prisma.Decimal | null;
+  plannedInternalTransferPrice: Prisma.Decimal | null;
 };
 
-const financeInput = (car: CarForFinance, salePriceGross: Num) => ({
-  taxScheme: car.taxScheme as TaxScheme,
-  totalCashAcquisitionCost: car.purchasePrice,
-  einkaufspreisGemaess24: car.einkaufspreisGemaess24 ?? car.purchasePrice,
-  salePriceGross,
-  expenses: approvedOnly(car.expenses).map((e) => ({
-    amountGross: e.amountGross,
-    amountNet: e.amountNet,
-    deductibleInputVatAmount: e.deductibleInputVatAmount,
-    alreadyIncludedInAcquisitionCost: e.alreadyIncludedInAcquisitionCost,
-  })),
-});
+/**
+ * Базис приобретения MOTORHOF OG (§9). Для партнёрских авто — внутренний
+ * Verkaufspreis (фактический, иначе плановый, иначе fallback на purchasePrice);
+ * для собственных авто OG — обычная закупочная цена. Это и totalCashAcquisitionCost,
+ * и §24-Einkaufspreis для OG (внутренний счёт — база Differenzbesteuerung OG).
+ */
+export const ogAcquisitionBasis = (car: CarForFinance): Dec => {
+  if (isPartnerOwner(car.currentOwner)) {
+    const internal = car.actualInternalTransferPrice ?? car.plannedInternalTransferPrice;
+    if (internal != null) return dec(internal);
+  }
+  return dec(car.purchasePrice);
+};
 
-/** Себестоимость (кэш на входе): закупка + подтверждённые расходы, не входящие в неё. */
+const financeInput = (car: CarForFinance, salePriceGross: Num) => {
+  const basis = ogAcquisitionBasis(car);
+  return {
+    taxScheme: car.taxScheme as TaxScheme,
+    totalCashAcquisitionCost: basis,
+    // Для собственных авто OG уважаем явный einkauf24; для партнёрских база — внутренний счёт.
+    einkaufspreisGemaess24: isPartnerOwner(car.currentOwner)
+      ? basis
+      : car.einkaufspreisGemaess24 ?? basis,
+    salePriceGross,
+    expenses: approvedOnly(car.expenses).map((e) => ({
+      amountGross: e.amountGross,
+      amountNet: e.amountNet,
+      deductibleInputVatAmount: e.deductibleInputVatAmount,
+      alreadyIncludedInAcquisitionCost: e.alreadyIncludedInAcquisitionCost,
+    })),
+  };
+};
+
+/** Себестоимость OG: базис приобретения + подтверждённые расходы OG, не входящие в него. */
 export const carCost = (car: CarForFinance): Dec =>
   round2(
     approvedOnly(car.expenses)
       .filter((e) => !e.alreadyIncludedInAcquisitionCost)
-      .reduce((s, e) => s.plus(dec(e.amountGross)), dec(car.purchasePrice))
+      .reduce((s, e) => s.plus(dec(e.amountGross)), ogAcquisitionBasis(car))
   );
 
 /** Плановая финансовая картина: цена = plannedSalePriceGross ?? listPrice. */
@@ -135,6 +160,59 @@ export const markupPct = (car: CarForFinance): number => {
   const cost = carCost(car);
   return cost.gt(0) ? Math.round(carMargin(car).div(cost).times(100).toNumber()) : 0;
 };
+
+// ─── Владелец и внутренняя продажа e.U. → OG (§9) ────────────────
+// Три партнёрские компании поставляют авто в MOTORHOF OG через внутренний счёт.
+// Результаты поставщика и OG считаются РАЗДЕЛЬНО и не смешиваются.
+
+export const PARTNER_OWNERS = ["MRIYA_MOTORS", "A_MOTORS", "AUTOHUB"] as const;
+export const isPartnerOwner = (owner: string): boolean =>
+  (PARTNER_OWNERS as readonly string[]).includes(owner);
+
+export const INTERNAL_INVOICE_PAYMENT: Record<string, string> = {
+  OPEN: "Не оплачен",
+  PAID: "Оплачен",
+};
+
+export type CarForOwner = {
+  currentOwner: string;
+  partnerPurchasePrice: Prisma.Decimal | null;
+  partnerAcquisitionCost: Prisma.Decimal | null;
+  plannedInternalTransferPrice: Prisma.Decimal | null;
+  actualInternalTransferPrice: Prisma.Decimal | null;
+  internalInvoiceTaxScheme: string | null;
+};
+
+/**
+ * Результат поставляющей компании (e.U./AutoHub) по внутренней продаже в OG (§9).
+ * Продажа поставщика = внутренний Verkaufspreis (фактический, иначе плановый);
+ * себестоимость поставщика = partnerAcquisitionCost; §24-база = partnerPurchasePrice;
+ * налоговый режим — режим ВНУТРЕННЕГО счёта (не путать с режимом продажи OG клиенту).
+ * null — если авто не партнёрское или внутренняя цена ещё не задана.
+ */
+export const supplierFinance = (car: CarForOwner): VehicleFinanceResult | null => {
+  if (!isPartnerOwner(car.currentOwner)) return null;
+  const internalSale = car.actualInternalTransferPrice ?? car.plannedInternalTransferPrice;
+  if (internalSale == null) return null;
+  const acqCost = car.partnerAcquisitionCost ?? car.partnerPurchasePrice ?? new Decimal(0);
+  const einkauf24 = car.partnerPurchasePrice ?? car.partnerAcquisitionCost ?? new Decimal(0);
+  return computeVehicleFinance({
+    taxScheme: (car.internalInvoiceTaxScheme as TaxScheme) ?? "UNGEKLAERT",
+    totalCashAcquisitionCost: acqCost,
+    einkaufspreisGemaess24: einkauf24,
+    salePriceGross: internalSale,
+    expenses: [],
+  });
+};
+
+/**
+ * Внутренний счёт e.U.→OG «завершён» — есть фактический внутренний Verkaufspreis
+ * и номер счёта (§9). От этого зависит блокировка/пометка при переводе в SOLD.
+ */
+export const internalInvoiceComplete = (car: {
+  actualInternalTransferPrice: Prisma.Decimal | null;
+  internalInvoiceNumber: string | null;
+}): boolean => car.actualInternalTransferPrice != null && !!car.internalInvoiceNumber;
 
 // ─── Справочники ────────────────────────────────────────────────
 

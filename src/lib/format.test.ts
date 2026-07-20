@@ -8,7 +8,15 @@ import {
   pickerlNeedsAttention,
   requiredDocs,
   isFinancialDoc,
+  isPartnerOwner,
+  ogAcquisitionBasis,
+  supplierFinance,
+  internalInvoiceComplete,
+  carMargin,
 } from "./format";
+import { Decimal } from "./finance";
+
+const D = (v: number) => new Decimal(v);
 
 const NOW = new Date("2026-07-15T12:00:00"); // июль 2026
 const pk = (vorhanden: string, month: number | null, year: number | null) => ({
@@ -99,6 +107,86 @@ describe("Учётный код и парковка (§7)", () => {
   it("internalCode: «A-12 / MH-0042» или «— / MH-0042» без места", () => {
     expect(internalCode({ mhNumber: 42, parkingRow: "A", parkingSpot: 12 })).toBe("A-12 / MH-0042");
     expect(internalCode({ mhNumber: 42, parkingRow: null, parkingSpot: null })).toBe("— / MH-0042");
+  });
+});
+
+describe("Владелец и внутренняя продажа e.U. → OG (§9)", () => {
+  // Полная модель авто для finance-адаптеров + владельца.
+  const car = (over: Record<string, unknown> = {}) => ({
+    taxScheme: "DIFFERENZBESTEUERUNG",
+    purchasePrice: D(9000),
+    listPrice: D(15000),
+    einkaufspreisGemaess24: null,
+    plannedSalePriceGross: null,
+    expenses: [],
+    currentOwner: "MOTORHOF_OG",
+    actualInternalTransferPrice: null,
+    plannedInternalTransferPrice: null,
+    partnerPurchasePrice: null,
+    partnerAcquisitionCost: null,
+    internalInvoiceTaxScheme: null,
+    internalInvoiceNumber: null,
+    ...over,
+  });
+
+  it("isPartnerOwner: три партнёрские компании — да, MOTORHOF OG — нет", () => {
+    expect(isPartnerOwner("MRIYA_MOTORS")).toBe(true);
+    expect(isPartnerOwner("A_MOTORS")).toBe(true);
+    expect(isPartnerOwner("AUTOHUB")).toBe(true);
+    expect(isPartnerOwner("MOTORHOF_OG")).toBe(false);
+  });
+
+  it("база OG: собственное авто — purchasePrice; партнёрское — внутр. счёт (факт ?? план ?? fallback)", () => {
+    // собственное авто OG → закупочная цена
+    expect(ogAcquisitionBasis(car()).toString()).toBe("9000");
+    // партнёрское с фактическим внутр. счётом → факт
+    expect(
+      ogAcquisitionBasis(
+        car({ currentOwner: "MRIYA_MOTORS", plannedInternalTransferPrice: D(11000), actualInternalTransferPrice: D(12000) })
+      ).toString()
+    ).toBe("12000");
+    // партнёрское только с плановым → план
+    expect(
+      ogAcquisitionBasis(car({ currentOwner: "MRIYA_MOTORS", plannedInternalTransferPrice: D(11000) })).toString()
+    ).toBe("11000");
+    // партнёрское без внутренней цены → fallback на purchasePrice
+    expect(ogAcquisitionBasis(car({ currentOwner: "AUTOHUB" })).toString()).toBe("9000");
+  });
+
+  it("результат поставщика: Differenzbesteuerung по внутреннему счёту, не смешан с OG", () => {
+    // поставщик: закупка 10000, общая стоимость 10500, внутр. продажа в OG 12000
+    // Differenz-USt = max(0, 12000−10000)×20/120 = 333.33; результат = 12000−10500−333.33 = 1166.67
+    const s = supplierFinance(
+      car({
+        currentOwner: "MRIYA_MOTORS",
+        partnerPurchasePrice: D(10000),
+        partnerAcquisitionCost: D(10500),
+        actualInternalTransferPrice: D(12000),
+        internalInvoiceTaxScheme: "DIFFERENZBESTEUERUNG",
+      })
+    );
+    expect(s?.vatAmount.toString()).toBe("333.33");
+    expect(s?.finalMargin.toString()).toBe("1166.67");
+  });
+
+  it("результат поставщика: нет партнёра или нет внутренней цены → null", () => {
+    expect(supplierFinance(car())).toBeNull(); // MOTORHOF_OG
+    expect(supplierFinance(car({ currentOwner: "AUTOHUB" }))).toBeNull(); // нет внутренней цены
+  });
+
+  it("результат OG партнёрского авто считается от внутреннего счёта, а не от purchasePrice", () => {
+    // внутр. счёт 12000 (база OG), продажа 15000, Differenz → USt = (15000−12000)/6 = 500
+    // маржа OG = 15000 − 12000 − 500 = 2500 (purchasePrice 9000 не участвует)
+    const m = carMargin(
+      car({ currentOwner: "MRIYA_MOTORS", actualInternalTransferPrice: D(12000), listPrice: D(15000) })
+    );
+    expect(m.toString()).toBe("2500");
+  });
+
+  it("внутренний счёт завершён только при наличии фактической цены И номера (§9)", () => {
+    expect(internalInvoiceComplete({ actualInternalTransferPrice: D(12000), internalInvoiceNumber: "RE-1" })).toBe(true);
+    expect(internalInvoiceComplete({ actualInternalTransferPrice: D(12000), internalInvoiceNumber: null })).toBe(false);
+    expect(internalInvoiceComplete({ actualInternalTransferPrice: null, internalInvoiceNumber: "RE-1" })).toBe(false);
   });
 });
 
