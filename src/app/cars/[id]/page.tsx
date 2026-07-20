@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
-import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus, assignParking } from "@/lib/actions";
+import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus, assignParking, createPickerlTask } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import {
@@ -14,6 +14,7 @@ import {
   markupPct,
   mhCode,
   internalCode,
+  pickerlNeedsAttention,
   CAR_STATUS,
   CAR_STATUS_ORDER,
   SALES_STATUS_SET,
@@ -21,6 +22,9 @@ import {
   STAGE_LABEL,
   DEAL_TYPE,
   TAX_SCHEME,
+  SERVICEHEFT,
+  JA_NEIN_UNBEKANNT,
+  BODY_PART_LABEL,
 } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -30,10 +34,10 @@ export default async function CarPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ perror?: string }>;
+  searchParams: Promise<{ perror?: string; pickerl?: string }>;
 }) {
   const { id } = await params;
-  const { perror } = await searchParams;
+  const { perror, pickerl } = await searchParams;
   const user = await requireUser();
 
   // Redaction (roles-motorhof.md): запрещённые блоки НЕ рендерятся на сервере —
@@ -74,9 +78,13 @@ export default async function CarPage({
     ["Пробег", `${car.mileage.toLocaleString("ru-RU")} км`],
     ["КПП", car.transmission ?? "—"],
     ["Топливо", car.fuel ?? "—"],
-    ["Объём", car.engineVol ? `${car.engineVol} л` : "—"],
+    ["Мощность", car.leistung ? `${car.leistung} кВт` : "—"],
     ["Цвет", car.color ?? "—"],
+    ["Владельцев", car.voranmeldungen != null ? String(car.voranmeldungen) : "неизв."],
+    ["Ключей", car.keysCount != null ? String(car.keysCount) : "неизв."],
   ];
+  const nachParts = car.nachlackierungenParts.map((p) => BODY_PART_LABEL[p] ?? p).join(", ");
+  const pickerlAlert = pickerlNeedsAttention(car);
 
   return (
     <div>
@@ -116,6 +124,22 @@ export default async function CarPage({
         </div>
       </header>
 
+      {/* Модалка предложения создать Pickerl-задачу (§8.4) — только сразу после
+          сохранения (по query-параметру), не при каждом рендере. */}
+      {pickerl === "ask" && can(user, "task.manage") && (
+        <div className="animate-in mb-4 flex items-center justify-between gap-4 rounded-xl border border-[rgba(242,163,60,0.3)] bg-[var(--accent-dim)] p-4">
+          <p className="text-[14px]">
+            Для <b>{internalCode(car)} {car.make} {car.model}</b> требуется Pickerl (§57a). Создать задачу по прохождению?
+          </p>
+          <div className="flex shrink-0 gap-2">
+            <form action={createPickerlTask.bind(null, car.id)}>
+              <button type="submit" className="btn btn-primary !py-1.5">Создать задачу</button>
+            </form>
+            <Link href={`/cars/${car.id}`} className="btn btn-ghost !py-1.5">Не сейчас</Link>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2 flex flex-col gap-4">
           <section className="panel animate-in delay-1 p-5">
@@ -132,6 +156,46 @@ export default async function CarPage({
               <div className="mt-5 border-t border-line pt-4">
                 <div className="label mb-1.5">Заметки</div>
                 <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{car.notes}</p>
+              </div>
+            )}
+          </section>
+
+          {/* Техническая карта (§8.2–8.4) — видна всем вошедшим (техчасть). */}
+          <section className="panel animate-in delay-2 p-5">
+            <h2 className="mb-4 text-[15px] font-bold">Техническая карта</h2>
+            <dl className="grid grid-cols-3 gap-y-4">
+              <div>
+                <dt className="label mb-1">Serviceheft</dt>
+                <dd className="text-[14px]">{SERVICEHEFT[car.serviceheft] ?? car.serviceheft}</dd>
+              </div>
+              <div>
+                <dt className="label mb-1">Nachlackierungen</dt>
+                <dd className="text-[14px]">{JA_NEIN_UNBEKANNT[car.nachlackierungen] ?? car.nachlackierungen}</dd>
+              </div>
+              <div>
+                <dt className="label mb-1">Pickerl</dt>
+                <dd className="flex items-center gap-2 text-[14px]">
+                  {JA_NEIN_UNBEKANNT[car.pickerlVorhanden] ?? car.pickerlVorhanden}
+                  {car.pickerlVorhanden === "JA" && car.pickerlMonth && car.pickerlYear && (
+                    <span className="text-muted">
+                      · {String(car.pickerlMonth).padStart(2, "0")}.{car.pickerlYear}
+                    </span>
+                  )}
+                  {pickerlAlert && <span className="chip chip-red !px-1.5 !text-[10px]">внимание</span>}
+                </dd>
+              </div>
+            </dl>
+            {car.nachlackierungen === "JA" && nachParts && (
+              <div className="mt-4 border-t border-line pt-3">
+                <div className="label mb-1">Перекрашенные части</div>
+                <p className="text-[13px]">{nachParts}</p>
+              </div>
+            )}
+            {(car.serviceComment || car.pickerlComment || car.nachlackierungenComment) && (
+              <div className="mt-4 flex flex-col gap-1.5 border-t border-line pt-3 text-[13px] text-muted">
+                {car.serviceComment && <div>Сервис: {car.serviceComment}</div>}
+                {car.nachlackierungenComment && <div>Покраска: {car.nachlackierungenComment}</div>}
+                {car.pickerlComment && <div>Pickerl: {car.pickerlComment}</div>}
               </div>
             )}
           </section>

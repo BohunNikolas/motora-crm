@@ -9,15 +9,37 @@ datasource db {
 
 model Car {
   id            String    @id @default(cuid())
-  vin           String?
+  vin           String?   @unique  // нормализуется в uppercase (§8.1)
   make          String
   model         String
   year          Int
+  erstzulassung DateTime? // первая регистрация (§8.1), опционально в дополнение к году
   mileage       Int
   color         String?
   transmission  String?
   fuel          String?
+  leistung      Int?      // мощность, кВт (§8.1)
+  voranmeldungen Int?     // число предыдущих владельцев; null = Unbekannt (§8.1)
+  keysCount     Int?      // число ключей 0–10; null = Unbekannt (§8.1)
+  purchaseDate  DateTime? // дата покупки (§8.1)
   engineVol     Float?    // legacy: скрыт из UI, поле оставлено (Требования §6.2)
+
+  // Serviceheft (§8.2)
+  serviceheft        String    @default("UNBEKANNT") // VOLLSTAENDIG|TEILWEISE|DIGITAL|NICHT_VORHANDEN|UNBEKANNT
+  lastServiceDate    DateTime?
+  lastServiceMileage Int?
+  serviceComment     String?
+
+  // Nachlackierungen (§8.3): перекрасы
+  nachlackierungen        String   @default("UNBEKANNT") // JA|NEIN|UNBEKANNT
+  nachlackierungenParts   String[] @default([])          // структурный список частей кузова
+  nachlackierungenComment String?
+
+  // Pickerl / §57a (§8.4)
+  pickerlVorhanden String  @default("UNBEKANNT") // JA|NEIN|UNBEKANNT
+  pickerlMonth     Int?    // Begutachtungsmonat 1–12
+  pickerlYear      Int?    // Begutachtungsjahr
+  pickerlComment   String?
   // Деньги — Decimal(12,2), EUR (Требования §2.7). Наследие Int переведено миграцией.
   purchasePrice Decimal   @db.Decimal(12, 2)
   listPrice     Decimal   @db.Decimal(12, 2)

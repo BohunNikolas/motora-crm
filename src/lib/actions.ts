@@ -3,7 +3,28 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "./prisma";
-import { DEAL_STAGES, CAR_STATUS_ORDER, SALES_STATUS_SET, TECH_STATUS_SET } from "./format";
+import {
+  DEAL_STAGES,
+  CAR_STATUS_ORDER,
+  SALES_STATUS_SET,
+  TECH_STATUS_SET,
+  pickerlNeedsAttention,
+} from "./format";
+
+// Заголовок автозадачи Pickerl — по нему ищем дубликаты (§8.4).
+const PICKERL_TITLE = "Пройти §57a Pickerl";
+
+/** «?pickerl=ask», если Pickerl требует внимания и нет незакрытой задачи. */
+async function pickerlAskSuffix(
+  carId: string,
+  data: { pickerlVorhanden: string; pickerlMonth: number | null; pickerlYear: number | null }
+): Promise<string> {
+  if (!pickerlNeedsAttention(data)) return "";
+  const existing = await prisma.task.findFirst({
+    where: { carId, done: false, title: PICKERL_TITLE },
+  });
+  return existing ? "" : "?pickerl=ask";
+}
 import { getSessionUser, audit } from "./auth";
 import { can, type AuthUser, type Capability } from "./authz";
 
@@ -52,21 +73,44 @@ function revalidateAll() {
 function carDataFromForm(fd: FormData) {
   const purchasePrice = money(fd, "purchasePrice") ?? "0";
   const listPrice = money(fd, "listPrice") ?? "0";
-  const engine = str(fd, "engineVol");
+  const vinRaw = str(fd, "vin");
   return {
     make: str(fd, "make") ?? "—",
     model: str(fd, "model") ?? "—",
     year: num(fd, "year") ?? new Date().getFullYear(),
+    erstzulassung: date(fd, "erstzulassung"),
     mileage: num(fd, "mileage") ?? 0,
-    vin: str(fd, "vin"),
+    vin: vinRaw ? vinRaw.toUpperCase() : null, // нормализация VIN (§8.1)
     color: str(fd, "color"),
     transmission: str(fd, "transmission"),
     fuel: str(fd, "fuel"),
-    engineVol: engine ? parseFloat(engine.replace(",", ".")) : null,
+    leistung: num(fd, "leistung"),
+    voranmeldungen: num(fd, "voranmeldungen"),
+    keysCount: num(fd, "keysCount"),
+    purchaseDate: date(fd, "purchaseDate"),
+    // engineVol больше не в форме (§6.2), но поле в БД остаётся — не трогаем при апдейте.
     purchasePrice,
     listPrice,
-    status: str(fd, "status") ?? "PREP",
+    status: str(fd, "status") ?? "PURCHASED",
     notes: str(fd, "notes"),
+    // Serviceheft (§8.2)
+    serviceheft: str(fd, "serviceheft") ?? "UNBEKANNT",
+    lastServiceDate: date(fd, "lastServiceDate"),
+    lastServiceMileage: num(fd, "lastServiceMileage"),
+    serviceComment: str(fd, "serviceComment"),
+    // Nachlackierungen (§8.3)
+    nachlackierungen: str(fd, "nachlackierungen") ?? "UNBEKANNT",
+    nachlackierungenParts:
+      str(fd, "nachlackierungen") === "JA"
+        ? (fd.getAll("nachlackierungenParts") as string[])
+        : [],
+    nachlackierungenComment: str(fd, "nachlackierungenComment"),
+    // Pickerl (§8.4)
+    pickerlVorhanden: str(fd, "pickerlVorhanden") ?? "UNBEKANNT",
+    pickerlMonth: num(fd, "pickerlMonth"),
+    pickerlYear: num(fd, "pickerlYear"),
+    pickerlComment: str(fd, "pickerlComment"),
+    // Налоги/закупка
     taxScheme: str(fd, "taxScheme") ?? "DIFFERENZBESTEUERUNG",
     purchaseChannel: str(fd, "purchaseChannel"),
     currentOwner: str(fd, "currentOwner") ?? "MOTORHOF_OG",
@@ -77,19 +121,50 @@ function carDataFromForm(fd: FormData) {
   };
 }
 
+/**
+ * Валидация формы (§8). Возвращает код ошибки для redirect или null.
+ * ferror-коды разбираются на странице формы.
+ */
+function validateCarForm(data: ReturnType<typeof carDataFromForm>, fd: FormData): string | null {
+  // Pickerl = Ja → месяц и год обязательны (§8.4)
+  if (data.pickerlVorhanden === "JA" && (data.pickerlMonth == null || data.pickerlYear == null)) {
+    return "pickerl-date";
+  }
+  // Дата поступления раньше даты покупки → нужен явный override с причиной (§8.1)
+  if (
+    data.arrivalDate &&
+    data.purchaseDate &&
+    data.arrivalDate < data.purchaseDate &&
+    !(str(fd, "dateOverride") === "1" && str(fd, "dateOverrideReason"))
+  ) {
+    return "date-order";
+  }
+  return null;
+}
+
 export async function createCar(fd: FormData) {
   const user = await requireCan("edit.car");
   const data = carDataFromForm(fd);
+  const err = validateCarForm(data, fd);
+  if (err) redirect(`/cars/new?ferror=${err}`);
+
   const car = await prisma.car.create({ data });
-  await audit(user.id, "Car", car.id, "create", { after: { make: data.make, model: data.model, status: data.status } });
+  await audit(user.id, "Car", car.id, "create", {
+    after: { make: data.make, model: data.model, status: data.status },
+    reason: str(fd, "dateOverrideReason") ?? undefined,
+  });
   revalidateAll();
-  redirect(`/cars/${car.id}`);
+  // Если Pickerl требует внимания и нет открытой задачи — предложить создать (§8.4)
+  redirect(`/cars/${car.id}${await pickerlAskSuffix(car.id, data)}`);
 }
 
 export async function updateCar(id: string, fd: FormData) {
   const user = await requireCan("edit.car");
-  const before = await prisma.car.findUnique({ where: { id } });
   const data = carDataFromForm(fd);
+  const err = validateCarForm(data, fd);
+  if (err) redirect(`/cars/${id}/edit?ferror=${err}`);
+
+  const before = await prisma.car.findUnique({ where: { id } });
   await prisma.car.update({ where: { id }, data });
   await audit(user.id, "Car", id, "update", {
     before: before
@@ -110,9 +185,33 @@ export async function updateCar(id: string, fd: FormData) {
       currentOwner: data.currentOwner,
       status: data.status,
     },
+    reason: str(fd, "dateOverrideReason") ?? undefined,
   });
   revalidateAll();
-  redirect(`/cars/${id}`);
+  redirect(`/cars/${id}${await pickerlAskSuffix(id, data)}`);
+}
+
+/** Создать автозадачу Pickerl (§8.4). Без дублей: одна незакрытая на авто. */
+export async function createPickerlTask(carId: string) {
+  const user = await requireCan("task.manage");
+  const car = await prisma.car.findUnique({ where: { id: carId } });
+  if (!car) return;
+  const existing = await prisma.task.findFirst({
+    where: { carId, done: false, title: PICKERL_TITLE },
+  });
+  if (!existing) {
+    // Срок — 1-е число месяца Begutachtung; если месяца нет, через 2 недели.
+    const due =
+      car.pickerlMonth && car.pickerlYear
+        ? new Date(`${car.pickerlYear}-${String(car.pickerlMonth).padStart(2, "0")}-01T00:00:00`)
+        : new Date(Date.now() + 14 * 86_400_000);
+    await prisma.task.create({ data: { title: PICKERL_TITLE, carId, dueDate: due } });
+    await audit(user.id, "Task", carId, "pickerl-task");
+  }
+  revalidatePath(`/cars/${carId}`);
+  revalidatePath("/tasks");
+  revalidatePath("/");
+  redirect(`/cars/${carId}`);
 }
 
 // Наборы статусов по ролям — в format.ts (единый источник для сервера и UI).

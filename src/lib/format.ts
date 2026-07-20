@@ -232,3 +232,60 @@ export const ROLE_LABEL: Record<string, string> = {
   TECHNICAL: "Техника",
   READ_ONLY: "Просмотр",
 };
+
+// ─── Техническая карточка авто (§8) ─────────────────────────────
+
+export const JA_NEIN_UNBEKANNT: Record<string, string> = {
+  JA: "Да",
+  NEIN: "Нет",
+  UNBEKANNT: "Неизвестно",
+};
+
+export const SERVICEHEFT: Record<string, string> = {
+  VOLLSTAENDIG: "Полная",
+  TEILWEISE: "Частичная",
+  DIGITAL: "Цифровая",
+  NICHT_VORHANDEN: "Нет",
+  UNBEKANNT: "Неизвестно",
+};
+export const SERVICEHEFT_ORDER = ["VOLLSTAENDIG", "TEILWEISE", "DIGITAL", "NICHT_VORHANDEN", "UNBEKANNT"];
+
+// Части кузова для перекрасов (§8.3), структурно.
+export const BODY_PARTS: { key: string; label: string }[] = [
+  { key: "MOTORHAUBE", label: "Капот" },
+  { key: "DACH", label: "Крыша" },
+  { key: "HECKKLAPPE", label: "Крышка багажника" },
+  { key: "STOSSFAENGER_V", label: "Бампер перед." },
+  { key: "STOSSFAENGER_H", label: "Бампер задн." },
+  { key: "KOTFLUEGEL_VL", label: "Крыло ПЛ" },
+  { key: "KOTFLUEGEL_VR", label: "Крыло ПП" },
+  { key: "KOTFLUEGEL_HL", label: "Крыло ЗЛ" },
+  { key: "KOTFLUEGEL_HR", label: "Крыло ЗП" },
+  { key: "TUER_VL", label: "Дверь ПЛ" },
+  { key: "TUER_VR", label: "Дверь ПП" },
+  { key: "TUER_HL", label: "Дверь ЗЛ" },
+  { key: "TUER_HR", label: "Дверь ЗП" },
+  { key: "SEITENTEIL_L", label: "Боковина Л" },
+  { key: "SEITENTEIL_R", label: "Боковина П" },
+  { key: "SONSTIGES", label: "Прочее" },
+];
+export const BODY_PART_LABEL: Record<string, string> = Object.fromEntries(
+  BODY_PARTS.map((p) => [p.key, p.label])
+);
+
+/**
+ * «Pickerl требует внимания» (§8.4): нет Pickerl, срок уже наступил, либо
+ * Begutachtungsmonat в текущем или следующем календарном месяце.
+ * `now` параметром — для тестируемости.
+ */
+export function pickerlNeedsAttention(
+  car: { pickerlVorhanden: string; pickerlMonth: number | null; pickerlYear: number | null },
+  now: Date = new Date()
+): boolean {
+  if (car.pickerlVorhanden !== "JA") return true; // нет или неизвестно — внимание
+  if (car.pickerlMonth == null || car.pickerlYear == null) return true;
+  // индекс месяца: год*12 + (месяц-1)
+  const target = car.pickerlYear * 12 + (car.pickerlMonth - 1);
+  const cur = now.getFullYear() * 12 + now.getMonth();
+  return target <= cur + 1; // прошло, текущий или следующий месяц
+}
