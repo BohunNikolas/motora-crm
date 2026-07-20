@@ -31,6 +31,7 @@ async function pickerlAskSuffix(
 }
 import { getSessionUser, audit } from "./auth";
 import { can, type AuthUser, type Capability } from "./authz";
+import { Decimal } from "./finance";
 
 /**
  * Обязательная server-side проверка прав в каждой мутации (roles-motorhof.md §1).
@@ -116,15 +117,93 @@ function carDataFromForm(fd: FormData) {
     pickerlComment: str(fd, "pickerlComment"),
     // Налоги/закупка
     taxScheme: str(fd, "taxScheme") ?? "DIFFERENZBESTEUERUNG",
-    purchaseChannel: str(fd, "purchaseChannel"),
-    einkaufspreisGemaess24: money(fd, "einkaufspreisGemaess24") ?? purchasePrice,
+    // §11.2: для Auktion §24-Einkaufspreis по умолчанию = Fahrzeugpreis, а не invoiceTotal.
+    einkaufspreisGemaess24:
+      money(fd, "einkaufspreisGemaess24") ??
+      (str(fd, "purchaseChannel") === "AUKTION" ? money(fd, "auctionVehiclePrice") ?? purchasePrice : purchasePrice),
     plannedSalePriceGross: money(fd, "plannedSalePriceGross") ?? listPrice,
     minimumSalePriceGross: money(fd, "minimumSalePriceGross"),
     arrivalDate: date(fd, "arrivalDate"),
     // Владелец и внутренняя продажа e.U. → OG (§9). Партнёрские поля значимы только
     // для Mriya/A Motors/AutoHub — для MOTORHOF_OG обнуляем, чтобы не смешивать данные.
     ...ownerDataFromForm(fd),
+    // Условные поля закупки по каналу (§11). Поля неактуальных каналов зануляются.
+    ...channelDataFromForm(fd),
   };
+}
+
+/**
+ * Условные поля закупки (§11). Возвращает purchaseChannel + поля выбранного канала;
+ * поля остальных каналов — null/false, чтобы не смешивать данные разных каналов.
+ */
+function channelDataFromForm(fd: FormData) {
+  const purchaseChannel = str(fd, "purchaseChannel");
+  const empty = {
+    auctionVehiclePrice: null, auctionFeeNet: null, auctionFeeVat: null,
+    auctionTransportCost: null, auctionOtherFees: null, auctionInvoiceTotal: null,
+    auctionInvoiceNumber: null, auctionSupplier: null, auctionCountry: null,
+    haendlerSupplier: null, haendlerInvoiceNumber: null, haendlerInvoiceDate: null,
+    haendlerPurchaseNet: null, haendlerPurchaseVat: null, haendlerPurchaseGross: null,
+    haendlerVorsteuerAusgewiesen: false,
+    tradeInEstimatedValue: null, tradeInCreditValue: null, tradeInSurcharge: null,
+    tradeInSurchargeBy: null,
+    importCountry: null, importZone: null, importCurrency: null, importExchangeRate: null,
+    importInvoiceAmount: null, importTransportCost: null, importZoll: null, importEust: null,
+    importNova: null, importOtherCosts: null,
+  } as const;
+
+  if (purchaseChannel === "AUKTION") {
+    return {
+      purchaseChannel, ...empty,
+      auctionVehiclePrice: money(fd, "auctionVehiclePrice"),
+      auctionFeeNet: money(fd, "auctionFeeNet"),
+      auctionFeeVat: money(fd, "auctionFeeVat"),
+      auctionTransportCost: money(fd, "auctionTransportCost"),
+      auctionOtherFees: money(fd, "auctionOtherFees"),
+      auctionInvoiceTotal: money(fd, "auctionInvoiceTotal"),
+      auctionInvoiceNumber: str(fd, "auctionInvoiceNumber"),
+      auctionSupplier: str(fd, "auctionSupplier"),
+      auctionCountry: str(fd, "auctionCountry"),
+    };
+  }
+  if (purchaseChannel === "HAENDLER") {
+    return {
+      purchaseChannel, ...empty,
+      haendlerSupplier: str(fd, "haendlerSupplier"),
+      haendlerInvoiceNumber: str(fd, "haendlerInvoiceNumber"),
+      haendlerInvoiceDate: date(fd, "haendlerInvoiceDate"),
+      haendlerPurchaseNet: money(fd, "haendlerPurchaseNet"),
+      haendlerPurchaseVat: money(fd, "haendlerPurchaseVat"),
+      haendlerPurchaseGross: money(fd, "haendlerPurchaseGross"),
+      haendlerVorsteuerAusgewiesen: str(fd, "haendlerVorsteuerAusgewiesen") === "1",
+    };
+  }
+  if (purchaseChannel === "INZAHLUNGNAHME") {
+    return {
+      purchaseChannel, ...empty,
+      tradeInEstimatedValue: money(fd, "tradeInEstimatedValue"),
+      tradeInCreditValue: money(fd, "tradeInCreditValue"),
+      tradeInSurcharge: money(fd, "tradeInSurcharge"),
+      tradeInSurchargeBy: str(fd, "tradeInSurchargeBy"),
+    };
+  }
+  if (purchaseChannel === "IMPORT") {
+    return {
+      purchaseChannel, ...empty,
+      importCountry: str(fd, "importCountry"),
+      importZone: str(fd, "importZone"),
+      importCurrency: str(fd, "importCurrency")?.toUpperCase() ?? null,
+      importExchangeRate: money(fd, "importExchangeRate"),
+      importInvoiceAmount: money(fd, "importInvoiceAmount"),
+      importTransportCost: money(fd, "importTransportCost"),
+      importZoll: money(fd, "importZoll"),
+      importEust: money(fd, "importEust"),
+      importNova: money(fd, "importNova"),
+      importOtherCosts: money(fd, "importOtherCosts"),
+    };
+  }
+  // PRIVAT или канал не выбран — только базовые поля.
+  return { purchaseChannel, ...empty };
 }
 
 /**
@@ -183,6 +262,17 @@ function validateCarForm(data: ReturnType<typeof carDataFromForm>, fd: FormData)
   ) {
     return "date-order";
   }
+  // Auktion (§11.2): Auktionsrechnung gesamt не может быть меньше Fahrzeugpreis без
+  // admin override с причиной (форму открывают только edit.car — ADMIN/PARTNER).
+  if (
+    data.purchaseChannel === "AUKTION" &&
+    data.auctionInvoiceTotal != null &&
+    data.auctionVehiclePrice != null &&
+    new Decimal(data.auctionInvoiceTotal).lt(new Decimal(data.auctionVehiclePrice)) &&
+    !(str(fd, "auctionOverride") === "1" && str(fd, "auctionOverrideReason"))
+  ) {
+    return "auction-below";
+  }
   return null;
 }
 
@@ -195,7 +285,7 @@ export async function createCar(fd: FormData) {
   const car = await prisma.car.create({ data });
   await audit(user.id, "Car", car.id, "create", {
     after: { make: data.make, model: data.model, status: data.status },
-    reason: str(fd, "dateOverrideReason") ?? undefined,
+    reason: str(fd, "dateOverrideReason") ?? str(fd, "auctionOverrideReason") ?? undefined,
   });
   revalidateAll();
   // Если Pickerl требует внимания и нет открытой задачи — предложить создать (§8.4)
@@ -229,7 +319,7 @@ export async function updateCar(id: string, fd: FormData) {
       currentOwner: data.currentOwner,
       status: data.status,
     },
-    reason: str(fd, "dateOverrideReason") ?? undefined,
+    reason: str(fd, "dateOverrideReason") ?? str(fd, "auctionOverrideReason") ?? undefined,
   });
   revalidateAll();
   redirect(`/cars/${id}${await pickerlAskSuffix(id, data)}`);

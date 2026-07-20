@@ -95,20 +95,46 @@ export type CarForFinance = {
   currentOwner: string;
   actualInternalTransferPrice: Prisma.Decimal | null;
   plannedInternalTransferPrice: Prisma.Decimal | null;
+  // §11.2 Auktion: базой приобретения служит Auktionsrechnung gesamt,
+  // §24-Einkaufspreis по умолчанию — Fahrzeugpreis (не invoiceTotal!).
+  purchaseChannel: string | null;
+  auctionInvoiceTotal: Prisma.Decimal | null;
+  auctionVehiclePrice: Prisma.Decimal | null;
+  // §11.4 Inzahlungnahme: базой приобретения служит зачётная стоимость.
+  tradeInCreditValue: Prisma.Decimal | null;
 };
 
 /**
- * Базис приобретения MOTORHOF OG (§9). Для партнёрских авто — внутренний
- * Verkaufspreis (фактический, иначе плановый, иначе fallback на purchasePrice);
- * для собственных авто OG — обычная закупочная цена. Это и totalCashAcquisitionCost,
- * и §24-Einkaufspreis для OG (внутренний счёт — база Differenzbesteuerung OG).
+ * Базис приобретения MOTORHOF OG. Приоритет:
+ *  1) партнёрское авто (§9) — внутренний Verkaufspreis e.U.→OG (факт ?? план);
+ *  2) Auktion (§11.2) — Auktionsrechnung gesamt;
+ *  3) Inzahlungnahme (§11.4) — зачётная стоимость;
+ *  4) иначе (Privat/Händler/Import) — purchasePrice.
+ * Это totalCashAcquisitionCost; §24-Einkaufspreis считается отдельно (см. financeInput).
  */
 export const ogAcquisitionBasis = (car: CarForFinance): Dec => {
   if (isPartnerOwner(car.currentOwner)) {
     const internal = car.actualInternalTransferPrice ?? car.plannedInternalTransferPrice;
     if (internal != null) return dec(internal);
   }
+  if (car.purchaseChannel === "AUKTION" && car.auctionInvoiceTotal != null) {
+    return dec(car.auctionInvoiceTotal);
+  }
+  if (car.purchaseChannel === "INZAHLUNGNAHME" && car.tradeInCreditValue != null) {
+    return dec(car.tradeInCreditValue);
+  }
   return dec(car.purchasePrice);
+};
+
+/** §24-Einkaufspreis для расчётов OG (Differenzbesteuerung). */
+const ogEinkauf24 = (car: CarForFinance, basis: Dec): Dec => {
+  // Партнёрское авто: §24-база = внутренний счёт (совпадает с basis).
+  if (isPartnerOwner(car.currentOwner)) return basis;
+  // Auktion: §24 по умолчанию = Fahrzeugpreis, НЕ Auktionsrechnung gesamt (§11.2, §12.2).
+  if (car.purchaseChannel === "AUKTION") {
+    return dec(car.einkaufspreisGemaess24 ?? car.auctionVehiclePrice ?? basis);
+  }
+  return dec(car.einkaufspreisGemaess24 ?? basis);
 };
 
 const financeInput = (car: CarForFinance, salePriceGross: Num) => {
@@ -116,10 +142,7 @@ const financeInput = (car: CarForFinance, salePriceGross: Num) => {
   return {
     taxScheme: car.taxScheme as TaxScheme,
     totalCashAcquisitionCost: basis,
-    // Для собственных авто OG уважаем явный einkauf24; для партнёрских база — внутренний счёт.
-    einkaufspreisGemaess24: isPartnerOwner(car.currentOwner)
-      ? basis
-      : car.einkaufspreisGemaess24 ?? basis,
+    einkaufspreisGemaess24: ogEinkauf24(car, basis),
     salePriceGross,
     expenses: approvedOnly(car.expenses).map((e) => ({
       amountGross: e.amountGross,
@@ -295,6 +318,36 @@ export const PURCHASE_CHANNEL: Record<string, string> = {
   INZAHLUNGNAHME: "Inzahlungnahme (трейд-ин)",
   IMPORT: "Import",
 };
+export const PURCHASE_CHANNEL_ORDER = ["PRIVAT", "AUKTION", "HAENDLER", "INZAHLUNGNAHME", "IMPORT"];
+
+// Import (§11.5)
+export const IMPORT_ZONE: Record<string, string> = { EU: "EU", DRITTLAND: "Drittland" };
+// Inzahlungnahme (§11.4): кто доплачивает разницу
+export const SURCHARGE_BY: Record<string, string> = {
+  CLIENT: "Доплачивает клиент",
+  MOTORHOF: "Доплачивает MOTORHOF",
+};
+
+/** Auktionsgebühr brutto = netto + USt (§11.2), справочно для отображения. */
+export const auctionFeeGross = (car: {
+  auctionFeeNet: Prisma.Decimal | null;
+  auctionFeeVat: Prisma.Decimal | null;
+}): Dec | null =>
+  car.auctionFeeNet == null && car.auctionFeeVat == null
+    ? null
+    : sumMoney([car.auctionFeeNet, car.auctionFeeVat]);
+
+/**
+ * Проверка §11.2: Auktionsrechnung gesamt не может быть меньше Fahrzeugpreis
+ * без admin override. true → нарушение (нужен override с причиной).
+ */
+export const auctionTotalBelowVehiclePrice = (car: {
+  auctionInvoiceTotal: Prisma.Decimal | null;
+  auctionVehiclePrice: Prisma.Decimal | null;
+}): boolean =>
+  car.auctionInvoiceTotal != null &&
+  car.auctionVehiclePrice != null &&
+  dec(car.auctionInvoiceTotal).lt(dec(car.auctionVehiclePrice));
 
 export const CURRENT_OWNER: Record<string, string> = {
   MOTORHOF_OG: "MOTORHOF OG",

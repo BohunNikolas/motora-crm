@@ -1,0 +1,35 @@
+-- Условные поля закупки по каналам (§11). Все колонки nullable либо с DEFAULT —
+-- backfill не нужен: у существующих авто поля каналов остаются NULL, а базой
+-- приобретения по-прежнему служит purchasePrice (ogAcquisitionBasis).
+-- AlterTable
+ALTER TABLE "Car"
+ADD COLUMN     "auctionVehiclePrice" DECIMAL(12,2),
+ADD COLUMN     "auctionFeeNet" DECIMAL(12,2),
+ADD COLUMN     "auctionFeeVat" DECIMAL(12,2),
+ADD COLUMN     "auctionTransportCost" DECIMAL(12,2),
+ADD COLUMN     "auctionOtherFees" DECIMAL(12,2),
+ADD COLUMN     "auctionInvoiceTotal" DECIMAL(12,2),
+ADD COLUMN     "auctionInvoiceNumber" TEXT,
+ADD COLUMN     "auctionSupplier" TEXT,
+ADD COLUMN     "auctionCountry" TEXT,
+ADD COLUMN     "haendlerSupplier" TEXT,
+ADD COLUMN     "haendlerInvoiceNumber" TEXT,
+ADD COLUMN     "haendlerInvoiceDate" TIMESTAMP(3),
+ADD COLUMN     "haendlerPurchaseNet" DECIMAL(12,2),
+ADD COLUMN     "haendlerPurchaseVat" DECIMAL(12,2),
+ADD COLUMN     "haendlerPurchaseGross" DECIMAL(12,2),
+ADD COLUMN     "haendlerVorsteuerAusgewiesen" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "tradeInEstimatedValue" DECIMAL(12,2),
+ADD COLUMN     "tradeInCreditValue" DECIMAL(12,2),
+ADD COLUMN     "tradeInSurcharge" DECIMAL(12,2),
+ADD COLUMN     "tradeInSurchargeBy" TEXT,
+ADD COLUMN     "importCountry" TEXT,
+ADD COLUMN     "importZone" TEXT,
+ADD COLUMN     "importCurrency" TEXT,
+ADD COLUMN     "importExchangeRate" DECIMAL(12,6),
+ADD COLUMN     "importInvoiceAmount" DECIMAL(12,2),
+ADD COLUMN     "importTransportCost" DECIMAL(12,2),
+ADD COLUMN     "importZoll" DECIMAL(12,2),
+ADD COLUMN     "importEust" DECIMAL(12,2),
+ADD COLUMN     "importNova" DECIMAL(12,2),
+ADD COLUMN     "importOtherCosts" DECIMAL(12,2);

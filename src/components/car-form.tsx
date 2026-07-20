@@ -7,18 +7,20 @@ import {
   FUELS,
   TAX_SCHEME,
   TAX_SCHEME_ORDER,
-  PURCHASE_CHANNEL,
   SERVICEHEFT,
   SERVICEHEFT_ORDER,
   JA_NEIN_UNBEKANNT,
   BODY_PARTS,
 } from "@/lib/format";
 import { CarOwnerFields } from "./car-owner-fields";
+import { CarChannelFields } from "./car-channel-fields";
 
 export const CAR_FORM_ERRORS: Record<string, string> = {
   "pickerl-date": "Pickerl отмечен как «Да» — укажите Begutachtungsmonat и Begutachtungsjahr.",
   "date-order":
     "Дата поступления раньше даты покупки. Поставьте галочку override и укажите причину в секции «Основные данные».",
+  "auction-below":
+    "Auktionsrechnung gesamt меньше Fahrzeugpreis. Поставьте галочку override и укажите причину в секции «Auktion».",
 };
 
 // Decimal → строка для value; Date → YYYY-MM-DD; число → строка (пусто = Unbekannt).
@@ -232,13 +234,41 @@ export function CarForm({
               {TAX_SCHEME_ORDER.map((k) => (<option key={k} value={k}>{TAX_SCHEME[k]}</option>))}
             </select>
           </div>
-          <div>
-            <label className="label" htmlFor="purchaseChannel">Канал закупки</label>
-            <select id="purchaseChannel" name="purchaseChannel" defaultValue={car?.purchaseChannel ?? ""} className="field">
-              <option value="">—</option>
-              {Object.entries(PURCHASE_CHANNEL).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-            </select>
-          </div>
+          <CarChannelFields
+            defaults={{
+              purchaseChannel: car?.purchaseChannel ?? "",
+              auctionVehiclePrice: m(car?.auctionVehiclePrice),
+              auctionFeeNet: m(car?.auctionFeeNet),
+              auctionFeeVat: m(car?.auctionFeeVat),
+              auctionTransportCost: m(car?.auctionTransportCost),
+              auctionOtherFees: m(car?.auctionOtherFees),
+              auctionInvoiceTotal: m(car?.auctionInvoiceTotal),
+              auctionInvoiceNumber: car?.auctionInvoiceNumber ?? "",
+              auctionSupplier: car?.auctionSupplier ?? "",
+              auctionCountry: car?.auctionCountry ?? "",
+              haendlerSupplier: car?.haendlerSupplier ?? "",
+              haendlerInvoiceNumber: car?.haendlerInvoiceNumber ?? "",
+              haendlerInvoiceDate: dstr(car?.haendlerInvoiceDate),
+              haendlerPurchaseNet: m(car?.haendlerPurchaseNet),
+              haendlerPurchaseVat: m(car?.haendlerPurchaseVat),
+              haendlerPurchaseGross: m(car?.haendlerPurchaseGross),
+              haendlerVorsteuerAusgewiesen: car?.haendlerVorsteuerAusgewiesen ?? false,
+              tradeInEstimatedValue: m(car?.tradeInEstimatedValue),
+              tradeInCreditValue: m(car?.tradeInCreditValue),
+              tradeInSurcharge: m(car?.tradeInSurcharge),
+              tradeInSurchargeBy: car?.tradeInSurchargeBy ?? "",
+              importCountry: car?.importCountry ?? "",
+              importZone: car?.importZone ?? "",
+              importCurrency: car?.importCurrency ?? "",
+              importExchangeRate: m(car?.importExchangeRate),
+              importInvoiceAmount: m(car?.importInvoiceAmount),
+              importTransportCost: m(car?.importTransportCost),
+              importZoll: m(car?.importZoll),
+              importEust: m(car?.importEust),
+              importNova: m(car?.importNova),
+              importOtherCosts: m(car?.importOtherCosts),
+            }}
+          />
           <CarOwnerFields
             defaults={{
               currentOwner: car?.currentOwner ?? "MOTORHOF_OG",

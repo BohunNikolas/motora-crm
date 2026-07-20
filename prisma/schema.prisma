@@ -82,6 +82,45 @@ model Car {
   // данных внутр. счёта → true (§9): «ожидает внутренний счёт», явная незавершённость.
   awaitingInternalInvoice   Boolean   @default(false)
 
+  // Условные поля закупки по каналам (§11). Значимы только для соответствующего
+  // purchaseChannel; поля других каналов зануляются (channelDataFromForm).
+  // Auktion (§11.2): базой приобретения OG служит auctionInvoiceTotal, §24 — Fahrzeugpreis.
+  auctionVehiclePrice   Decimal? @db.Decimal(12, 2) // Fahrzeugpreis
+  auctionFeeNet         Decimal? @db.Decimal(12, 2) // Auktionsgebühr netto
+  auctionFeeVat         Decimal? @db.Decimal(12, 2) // USt на комиссию (brutto = netto + USt)
+  auctionTransportCost  Decimal? @db.Decimal(12, 2) // Transportkosten
+  auctionOtherFees      Decimal? @db.Decimal(12, 2) // Sonstige Gebühren
+  auctionInvoiceTotal   Decimal? @db.Decimal(12, 2) // Auktionsrechnung gesamt — полная фактическая оплата
+  auctionInvoiceNumber  String?
+  auctionSupplier       String?
+  auctionCountry        String?
+  // Продано auktion-авто с gesamt < Fahrzeugpreis — только admin override с причиной (§11.2).
+  // Händler (§11.3)
+  haendlerSupplier             String?
+  haendlerInvoiceNumber        String?
+  haendlerInvoiceDate          DateTime?
+  haendlerPurchaseNet          Decimal? @db.Decimal(12, 2)
+  haendlerPurchaseVat          Decimal? @db.Decimal(12, 2)
+  haendlerPurchaseGross        Decimal? @db.Decimal(12, 2)
+  haendlerVorsteuerAusgewiesen Boolean  @default(false) // выделена ли Vorsteuer
+  // Inzahlungnahme (§11.4). Клиент и связанная продажа — в фазе 3e (Sale).
+  tradeInEstimatedValue Decimal? @db.Decimal(12, 2) // оценочная стоимость принятого авто
+  tradeInCreditValue    Decimal? @db.Decimal(12, 2) // зачётная стоимость (база приобретения OG)
+  tradeInSurcharge      Decimal? @db.Decimal(12, 2) // доплата (положит.)
+  tradeInSurchargeBy    String?  // CLIENT | MOTORHOF — кто доплачивает
+  // Import (§11.5). Юридическое решение о Differenzbesteuerung НЕ автоматизируем — при
+  // нехватке данных taxScheme = UNGEKLAERT. FX-пересчёт валюты — справочно (базой служит EUR).
+  importCountry       String?
+  importZone          String?  // EU | DRITTLAND
+  importCurrency      String?  // ISO-код исходной валюты (EUR = без пересчёта)
+  importExchangeRate  Decimal? @db.Decimal(12, 6) // курс исходной валюты к EUR
+  importInvoiceAmount Decimal? @db.Decimal(12, 2) // сумма счёта в исходной валюте
+  importTransportCost Decimal? @db.Decimal(12, 2)
+  importZoll          Decimal? @db.Decimal(12, 2) // пошлина
+  importEust          Decimal? @db.Decimal(12, 2) // Einfuhrumsatzsteuer
+  importNova          Decimal? @db.Decimal(12, 2) // NoVA
+  importOtherCosts    Decimal? @db.Decimal(12, 2)
+
   expenses      Expense[]
   deals         Deal[]
   tasks         Task[]

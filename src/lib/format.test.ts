@@ -13,6 +13,10 @@ import {
   supplierFinance,
   internalInvoiceComplete,
   carMargin,
+  carCost,
+  carPlannedFinance,
+  auctionFeeGross,
+  auctionTotalBelowVehiclePrice,
 } from "./format";
 import { Decimal } from "./finance";
 
@@ -126,6 +130,10 @@ describe("Владелец и внутренняя продажа e.U. → OG (�
     partnerAcquisitionCost: null,
     internalInvoiceTaxScheme: null,
     internalInvoiceNumber: null,
+    purchaseChannel: null,
+    auctionInvoiceTotal: null,
+    auctionVehiclePrice: null,
+    tradeInCreditValue: null,
     ...over,
   });
 
@@ -187,6 +195,69 @@ describe("Владелец и внутренняя продажа e.U. → OG (�
     expect(internalInvoiceComplete({ actualInternalTransferPrice: D(12000), internalInvoiceNumber: "RE-1" })).toBe(true);
     expect(internalInvoiceComplete({ actualInternalTransferPrice: D(12000), internalInvoiceNumber: null })).toBe(false);
     expect(internalInvoiceComplete({ actualInternalTransferPrice: null, internalInvoiceNumber: "RE-1" })).toBe(false);
+  });
+});
+
+describe("Каналы закупки §11 (условные поля и база приобретения)", () => {
+  const car = (over: Record<string, unknown> = {}) => ({
+    taxScheme: "DIFFERENZBESTEUERUNG",
+    purchasePrice: D(9000),
+    listPrice: D(12000),
+    einkaufspreisGemaess24: null,
+    plannedSalePriceGross: null,
+    expenses: [],
+    currentOwner: "MOTORHOF_OG",
+    actualInternalTransferPrice: null,
+    plannedInternalTransferPrice: null,
+    purchaseChannel: null,
+    auctionInvoiceTotal: null,
+    auctionVehiclePrice: null,
+    tradeInCreditValue: null,
+    ...over,
+  });
+
+  it("база приобретения: Auktion → Auktionsrechnung gesamt, Inzahlungnahme → зачётная стоимость", () => {
+    expect(ogAcquisitionBasis(car()).toString()).toBe("9000"); // без канала → purchasePrice
+    expect(
+      ogAcquisitionBasis(car({ purchaseChannel: "AUKTION", auctionInvoiceTotal: D(10800) })).toString()
+    ).toBe("10800");
+    expect(
+      ogAcquisitionBasis(car({ purchaseChannel: "INZAHLUNGNAHME", tradeInCreditValue: D(6000) })).toString()
+    ).toBe("6000");
+  });
+
+  it("Auktion §24.1: Fahrzeugpreis 10000 / gesamt 10800 / §24=Fahrzeugpreis / sale 12000 → USt 333.33, маржа до расходов 866.67", () => {
+    // §24-база = Fahrzeugpreis (10000), НЕ Auktionsrechnung gesamt (10800).
+    const c = car({
+      purchaseChannel: "AUKTION",
+      auctionVehiclePrice: D(10000),
+      auctionInvoiceTotal: D(10800),
+      listPrice: D(12000),
+    });
+    const fin = carPlannedFinance(c);
+    expect(fin.vatAmount.toString()).toBe("333.33"); // (12000−10000)/6
+    expect(fin.marginBeforeExpenses.toString()).toBe("866.67"); // 12000−10800−333.33
+    expect(fin.finalMargin.toString()).toBe("866.67");
+    expect(carCost(c).toString()).toBe("10800"); // себестоимость OG = gesamt
+  });
+
+  it("Auktion: §24 не берётся из gesamt (иначе маржа была бы 1000, а не 866.67)", () => {
+    const wrongIfUsesTotal = carPlannedFinance(
+      car({ purchaseChannel: "AUKTION", auctionVehiclePrice: D(10000), auctionInvoiceTotal: D(10800), listPrice: D(12000) })
+    ).finalMargin.toString();
+    expect(wrongIfUsesTotal).not.toBe("1000"); // (12000−10800−200)
+    expect(wrongIfUsesTotal).toBe("866.67");
+  });
+
+  it("Auktionsgebühr brutto = netto + USt; null если оба пусты", () => {
+    expect(auctionFeeGross({ auctionFeeNet: D(100), auctionFeeVat: D(20) })?.toString()).toBe("120");
+    expect(auctionFeeGross({ auctionFeeNet: null, auctionFeeVat: null })).toBeNull();
+  });
+
+  it("проверка §11.2: gesamt < Fahrzeugpreis → нарушение (нужен override)", () => {
+    expect(auctionTotalBelowVehiclePrice({ auctionInvoiceTotal: D(9500), auctionVehiclePrice: D(10000) })).toBe(true);
+    expect(auctionTotalBelowVehiclePrice({ auctionInvoiceTotal: D(10800), auctionVehiclePrice: D(10000) })).toBe(false);
+    expect(auctionTotalBelowVehiclePrice({ auctionInvoiceTotal: null, auctionVehiclePrice: D(10000) })).toBe(false);
   });
 });
 

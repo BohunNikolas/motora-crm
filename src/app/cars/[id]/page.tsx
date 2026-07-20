@@ -21,6 +21,8 @@ import {
   isFinancialDoc,
   isPartnerOwner,
   supplierFinance,
+  auctionFeeGross,
+  auctionTotalBelowVehiclePrice,
   DOC_TYPES,
   DOC_TYPE_LABEL,
   CAR_STATUS,
@@ -31,6 +33,9 @@ import {
   DEAL_TYPE,
   TAX_SCHEME,
   CURRENT_OWNER,
+  PURCHASE_CHANNEL,
+  IMPORT_ZONE,
+  SURCHARGE_BY,
   INTERNAL_INVOICE_PAYMENT,
   SERVICEHEFT,
   JA_NEIN_UNBEKANNT,
@@ -53,6 +58,7 @@ export default async function CarPage({
   // Redaction (roles-motorhof.md): запрещённые блоки НЕ рендерятся на сервере —
   // их цифр физически нет в HTML, который получает браузер.
   const seeMoney = can(user, "see.margin"); // экономика, расходы €, себестоимость
+  const seeAcq = can(user, "see.acquisition"); // закупочные цены/счета (§11)
   const seeInternal = can(user, "see.internalPrice"); // внутренняя продажа e.U.→OG (§9)
   const seeSalePrice = can(user, "see.salePrice");
   const seeExpenses = seeMoney || can(user, "edit.tech"); // TECHNICAL видит расходы по авто (свои сметы)
@@ -111,6 +117,7 @@ export default async function CarPage({
     ["Владельцев", car.voranmeldungen != null ? String(car.voranmeldungen) : "неизв."],
     ["Ключей", car.keysCount != null ? String(car.keysCount) : "неизв."],
     ["Владелец", CURRENT_OWNER[car.currentOwner] ?? car.currentOwner],
+    ["Канал закупки", car.purchaseChannel ? PURCHASE_CHANNEL[car.purchaseChannel] ?? car.purchaseChannel : "—"],
   ];
   const nachParts = car.nachlackierungenParts.map((p) => BODY_PART_LABEL[p] ?? p).join(", ");
   const pickerlAlert = pickerlNeedsAttention(car);
@@ -118,6 +125,17 @@ export default async function CarPage({
   // Владелец и внутренняя продажа e.U. → OG (§9).
   const isPartner = isPartnerOwner(car.currentOwner);
   const supplierFin = seeInternal && isPartner ? supplierFinance(car) : null;
+
+  // Канал закупки (§11) — детали видны под see.acquisition.
+  const feeGross = auctionFeeGross(car);
+  const auctionBelow = auctionTotalBelowVehiclePrice(car);
+  const acqRow = (label: string, value: string | null) =>
+    value ? (
+      <div className="flex justify-between gap-3">
+        <dt className="text-muted">{label}</dt>
+        <dd className="mono">{value}</dd>
+      </div>
+    ) : null;
 
   return (
     <div>
@@ -284,6 +302,62 @@ export default async function CarPage({
                   </div>
                 </div>
               </div>
+            </section>
+          )}
+
+          {/* Закупка по каналу (§11) — детали под see.acquisition (закупочные цены/счета). */}
+          {seeAcq && car.purchaseChannel && car.purchaseChannel !== "PRIVAT" && (
+            <section className="panel animate-in delay-1 p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-bold">Закупка · {PURCHASE_CHANNEL[car.purchaseChannel] ?? car.purchaseChannel}</h2>
+                {car.purchaseChannel === "AUKTION" && auctionBelow && (
+                  <span className="chip chip-amber">gesamt &lt; Fahrzeugpreis (override)</span>
+                )}
+              </div>
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[14px]">
+                {car.purchaseChannel === "AUKTION" && (<>
+                  {acqRow("Fahrzeugpreis", car.auctionVehiclePrice ? fmtMoney(car.auctionVehiclePrice) : null)}
+                  {acqRow("Auktionsgebühr netto", car.auctionFeeNet ? fmtMoney(car.auctionFeeNet) : null)}
+                  {acqRow("USt на комиссию", car.auctionFeeVat ? fmtMoney(car.auctionFeeVat) : null)}
+                  {acqRow("Auktionsgebühr brutto", feeGross ? fmtMoney(feeGross) : null)}
+                  {acqRow("Transportkosten", car.auctionTransportCost ? fmtMoney(car.auctionTransportCost) : null)}
+                  {acqRow("Sonstige Gebühren", car.auctionOtherFees ? fmtMoney(car.auctionOtherFees) : null)}
+                  <div className="col-span-2 flex justify-between gap-3 border-t border-line pt-2.5 font-bold">
+                    <dt>Auktionsrechnung gesamt</dt>
+                    <dd className="mono">{car.auctionInvoiceTotal ? fmtMoney(car.auctionInvoiceTotal) : "—"}</dd>
+                  </div>
+                  {acqRow("№ счёта", car.auctionInvoiceNumber)}
+                  {acqRow("Поставщик", car.auctionSupplier)}
+                  {acqRow("Страна", car.auctionCountry)}
+                </>)}
+                {car.purchaseChannel === "HAENDLER" && (<>
+                  {acqRow("Поставщик", car.haendlerSupplier)}
+                  {acqRow("№ счёта", car.haendlerInvoiceNumber)}
+                  {acqRow("Дата счёта", car.haendlerInvoiceDate ? fmtDate(car.haendlerInvoiceDate) : null)}
+                  {acqRow("Purchase netto", car.haendlerPurchaseNet ? fmtMoney(car.haendlerPurchaseNet) : null)}
+                  {acqRow("Purchase USt", car.haendlerPurchaseVat ? fmtMoney(car.haendlerPurchaseVat) : null)}
+                  {acqRow("Purchase brutto", car.haendlerPurchaseGross ? fmtMoney(car.haendlerPurchaseGross) : null)}
+                  {acqRow("Vorsteuer выделена", car.haendlerVorsteuerAusgewiesen ? "Ja" : "Nein")}
+                </>)}
+                {car.purchaseChannel === "INZAHLUNGNAHME" && (<>
+                  {acqRow("Оценочная стоимость", car.tradeInEstimatedValue ? fmtMoney(car.tradeInEstimatedValue) : null)}
+                  {acqRow("Зачётная стоимость", car.tradeInCreditValue ? fmtMoney(car.tradeInCreditValue) : null)}
+                  {acqRow("Доплата", car.tradeInSurcharge ? fmtMoney(car.tradeInSurcharge) : null)}
+                  {acqRow("Кто доплачивает", car.tradeInSurchargeBy ? SURCHARGE_BY[car.tradeInSurchargeBy] ?? car.tradeInSurchargeBy : null)}
+                </>)}
+                {car.purchaseChannel === "IMPORT" && (<>
+                  {acqRow("Страна", car.importCountry)}
+                  {acqRow("Зона", car.importZone ? IMPORT_ZONE[car.importZone] ?? car.importZone : null)}
+                  {acqRow("Валюта счёта", car.importCurrency)}
+                  {acqRow("Курс к EUR", car.importExchangeRate ? car.importExchangeRate.toString() : null)}
+                  {acqRow("Сумма счёта", car.importInvoiceAmount ? car.importInvoiceAmount.toString() : null)}
+                  {acqRow("Транспорт", car.importTransportCost ? fmtMoney(car.importTransportCost) : null)}
+                  {acqRow("Zoll", car.importZoll ? fmtMoney(car.importZoll) : null)}
+                  {acqRow("Einfuhrumsatzsteuer", car.importEust ? fmtMoney(car.importEust) : null)}
+                  {acqRow("NoVA", car.importNova ? fmtMoney(car.importNova) : null)}
+                  {acqRow("Прочие расходы", car.importOtherCosts ? fmtMoney(car.importOtherCosts) : null)}
+                </>)}
+              </dl>
             </section>
           )}
 
