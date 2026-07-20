@@ -68,27 +68,27 @@ async function main() {
       car(
         { make: "Toyota", model: "Camry", year: 2019, mileage: 92000, vin: "JTNBE46K473012345",
           color: "Чёрный", transmission: "АКПП", fuel: "Бензин", engineVol: 2.5,
-          purchasePrice: 12000, listPrice: 15500, status: "AVAILABLE",
+          purchasePrice: 12000, listPrice: 15500, status: "READY_FOR_SALE",
           notes: "Один владелец, сервисная книжка." },
         [{ title: "Замена колодок", amount: 250 }, { title: "Химчистка салона", amount: 180 }]
       ),
       car(
         { make: "Kia", model: "Rio", year: 2017, mileage: 78000, color: "Белый",
           transmission: "МКПП", fuel: "Бензин", engineVol: 1.6,
-          purchasePrice: 7000, listPrice: 9200, status: "AVAILABLE" },
+          purchasePrice: 7000, listPrice: 9200, status: "READY_FOR_SALE" },
         [{ title: "Полировка кузова", amount: 150 }]
       ),
       car(
         { make: "Hyundai", model: "Solaris", year: 2018, mileage: 64000, color: "Серебристый",
           transmission: "АКПП", fuel: "Бензин", engineVol: 1.6,
-          purchasePrice: 8000, listPrice: 10500, status: "PREP",
+          purchasePrice: 8000, listPrice: 10500, status: "IN_PREPARATION",
           notes: "Ждём стойки, потом на мойку." },
         [{ title: "Замена стоек", amount: 320 }, { title: "Развал-схождение", amount: 90 }]
       ),
       car(
         { make: "Volkswagen", model: "Polo", year: 2019, mileage: 55000, color: "Синий",
           transmission: "АКПП", fuel: "Бензин", engineVol: 1.6,
-          purchasePrice: 9000, listPrice: 11800, status: "AVAILABLE" }
+          purchasePrice: 9000, listPrice: 11800, status: "READY_FOR_SALE" }
       ),
       car(
         { make: "Mazda", model: "6", year: 2016, mileage: 110000, color: "Красный",
@@ -100,13 +100,13 @@ async function main() {
       car(
         { make: "Skoda", model: "Octavia", year: 2020, mileage: 41000, color: "Серый",
           transmission: "Робот", fuel: "Дизель", engineVol: 2.0,
-          purchasePrice: 14000, listPrice: 17500, status: "AVAILABLE" },
+          purchasePrice: 14000, listPrice: 17500, status: "READY_FOR_SALE" },
         [{ title: "Замена масла и фильтров", amount: 260 }]
       ),
       car(
         { make: "Renault", model: "Duster", year: 2018, mileage: 87000, color: "Оранжевый",
           transmission: "МКПП", fuel: "Бензин", engineVol: 2.0,
-          purchasePrice: 8500, listPrice: 11000, status: "PREP" },
+          purchasePrice: 8500, listPrice: 11000, status: "IN_PREPARATION" },
         [{ title: "Химчистка", amount: 180 }]
       ),
       // Продан в этом месяце

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "./prisma";
-import { DEAL_STAGES } from "./format";
+import { DEAL_STAGES, CAR_STATUS_ORDER, SALES_STATUS_SET, TECH_STATUS_SET } from "./format";
 import { getSessionUser, audit } from "./auth";
 import { can, type AuthUser, type Capability } from "./authz";
 
@@ -115,22 +115,87 @@ export async function updateCar(id: string, fd: FormData) {
   redirect(`/cars/${id}`);
 }
 
-// Статусы: SALES — только продажные (RESERVED/SOLD и возврат в AVAILABLE),
-// TECHNICAL — только подготовительные (PREP/AVAILABLE). ADMIN/PARTNER — любые.
-const SALES_STATUSES = ["RESERVED", "SOLD", "AVAILABLE"];
-const TECH_STATUSES = ["PREP", "AVAILABLE"];
-
+// Наборы статусов по ролям — в format.ts (единый источник для сервера и UI).
+// ADMIN/PARTNER (edit.car) получают все статусы, включая приёмку (Куплен / В дороге).
 export async function setCarStatus(id: string, status: string) {
-  const user = await requireCan("status.sales", "status.tech");
-  const allowed =
-    (can(user, "status.sales") && SALES_STATUSES.includes(status)) ||
-    (can(user, "status.tech") && TECH_STATUSES.includes(status));
-  if (!allowed) throw new Error("Ваша роль не может установить этот статус");
+  const user = await requireCan("status.sales", "status.tech", "edit.car");
+  const allowed = new Set<string>();
+  if (can(user, "edit.car")) CAR_STATUS_ORDER.forEach((s) => allowed.add(s));
+  if (can(user, "status.sales")) SALES_STATUS_SET.forEach((s) => allowed.add(s));
+  if (can(user, "status.tech")) TECH_STATUS_SET.forEach((s) => allowed.add(s));
+  if (!allowed.has(status)) throw new Error("Ваша роль не может установить этот статус");
 
-  const before = await prisma.car.findUnique({ where: { id }, select: { status: true } });
-  await prisma.car.update({ where: { id }, data: { status } });
-  await audit(user.id, "Car", id, "status", { before: { status: before?.status }, after: { status } });
+  const before = await prisma.car.findUnique({
+    where: { id },
+    select: { status: true, parkingRow: true, parkingSpot: true },
+  });
+  if (!before) return;
+
+  // Продажа освобождает активное парковочное место, история сохраняется (§18.2).
+  const freeParking = status === "SOLD" && (before.parkingRow || before.parkingSpot != null);
+  await prisma.car.update({
+    where: { id },
+    data: freeParking ? { status, parkingRow: null, parkingSpot: null } : { status },
+  });
+  if (freeParking) {
+    await prisma.parkingMove.create({
+      data: {
+        carId: id,
+        fromRow: before.parkingRow,
+        fromSpot: before.parkingSpot,
+        toRow: null,
+        toSpot: null,
+        userId: user.id,
+      },
+    });
+  }
+  await audit(user.id, "Car", id, "status", { before: { status: before.status }, after: { status } });
   revalidateAll();
+}
+
+/** Назначить/сменить парковочное место с записью в историю (§7). */
+export async function assignParking(id: string, fd: FormData) {
+  const user = await requireCan("edit.car", "status.sales", "status.tech");
+  const rawRow = str(fd, "parkingRow");
+  const row = rawRow ? rawRow.toUpperCase().slice(0, 1) : null;
+  const spot = num(fd, "parkingSpot");
+
+  if (row && !/^[A-Z]$/.test(row)) redirect(`/cars/${id}?perror=row`);
+  if ((row && spot == null) || (!row && spot != null)) redirect(`/cars/${id}?perror=incomplete`);
+  if (spot != null && spot <= 0) redirect(`/cars/${id}?perror=spot`);
+
+  const before = await prisma.car.findUnique({
+    where: { id },
+    select: { parkingRow: true, parkingSpot: true },
+  });
+  if (!before) return;
+  if (before.parkingRow === row && before.parkingSpot === spot) return; // без изменений
+
+  try {
+    await prisma.car.update({ where: { id }, data: { parkingRow: row, parkingSpot: spot } });
+  } catch (e: unknown) {
+    // Нарушение частичного уникального индекса — место занято другим активным авто.
+    if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2002") {
+      redirect(`/cars/${id}?perror=taken`);
+    }
+    throw e;
+  }
+  await prisma.parkingMove.create({
+    data: {
+      carId: id,
+      fromRow: before.parkingRow,
+      fromSpot: before.parkingSpot,
+      toRow: row,
+      toSpot: spot,
+      userId: user.id,
+    },
+  });
+  await audit(user.id, "Car", id, "parking", {
+    before: { row: before.parkingRow, spot: before.parkingSpot },
+    after: { row, spot },
+  });
+  revalidatePath(`/cars/${id}`);
+  revalidatePath("/cars");
 }
 
 export async function deleteCar(id: string) {

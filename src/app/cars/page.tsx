@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Cell } from "@/components/cell-link";
 import { requireUser } from "@/lib/auth";
 import { viewerFlags } from "@/lib/authz";
-import { fmtMoney, sumMoney, carCost, carMargin, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
+import { fmtMoney, sumMoney, carCost, carMargin, mhCode, internalCode, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +22,20 @@ export default async function CarsPage({
     orderBy: { createdAt: "desc" },
   });
 
-  // Поиск в JS, а не в БД: SQLite не умеет регистронезависимый LIKE для кириллицы.
-  // После переезда на Postgres (этап 8) можно заменить на contains + mode: "insensitive".
+  // Поиск в JS (регистронезависимый, кириллица). Ищем по марке/модели/VIN/году,
+  // а также по MH-коду и парковочному месту (§6.2).
   const needle = q?.trim().toLowerCase();
   const cars = needle
     ? all.filter((c) =>
-        [c.make, c.model, c.vin ?? "", String(c.year)].some((f) => f.toLowerCase().includes(needle))
+        [
+          c.make,
+          c.model,
+          c.vin ?? "",
+          String(c.year),
+          mhCode(c.mhNumber),
+          String(c.mhNumber),
+          c.parkingRow && c.parkingSpot != null ? `${c.parkingRow}-${c.parkingSpot}` : "",
+        ].some((f) => f.toLowerCase().includes(needle))
       )
     : all;
 
@@ -117,12 +125,13 @@ export default async function CarsPage({
           <div className="overflow-x-auto">
             {/* min-w: без него width:100% сплющивает колонки на узком окне —
                 названия переносятся, строки раздуваются. Лучше честный скролл. */}
-            <table className={`table ${flags.seeAcquisition ? "min-w-[900px]" : "min-w-[640px]"}`}>
+            <table className={`table ${flags.seeAcquisition ? "min-w-[1020px]" : "min-w-[760px]"}`}>
               {/* Redaction: закупка/расходы/себестоимость/маржа рендерятся ТОЛЬКО
                   для ролей с see.acquisition/see.margin — в HTML других ролей их нет.
                   Цена продажи — только с see.salePrice (TECHNICAL не видит и её). */}
               <thead>
                 <tr>
+                  <th>Код</th>
                   <th>Автомобиль</th>
                   <th className="text-right">Пробег</th>
                   {flags.seeAcquisition && <th className="text-right">Закупка</th>}
@@ -141,6 +150,9 @@ export default async function CarsPage({
                   const href = `/cars/${c.id}`;
                   return (
                     <tr key={c.id}>
+                      <Cell href={href} className="mono whitespace-nowrap text-[12px] text-muted">
+                        {internalCode(c)}
+                      </Cell>
                       <Cell href={href}>
                         <div className="font-semibold">
                           {c.make} {c.model}

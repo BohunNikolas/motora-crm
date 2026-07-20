@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
-import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus } from "@/lib/actions";
+import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus, assignParking } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import {
@@ -12,8 +12,12 @@ import {
   carCost,
   carPlannedFinance,
   markupPct,
+  mhCode,
+  internalCode,
   CAR_STATUS,
   CAR_STATUS_ORDER,
+  SALES_STATUS_SET,
+  TECH_STATUS_SET,
   STAGE_LABEL,
   DEAL_TYPE,
   TAX_SCHEME,
@@ -21,8 +25,15 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function CarPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CarPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ perror?: string }>;
+}) {
   const { id } = await params;
+  const { perror } = await searchParams;
   const user = await requireUser();
 
   // Redaction (roles-motorhof.md): запрещённые блоки НЕ рендерятся на сервере —
@@ -37,10 +48,19 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
     include: {
       expenses: { orderBy: { date: "desc" } },
       deals: { include: { client: true }, orderBy: { createdAt: "desc" } },
+      parkingMoves: { orderBy: { movedAt: "desc" }, take: 6 },
     },
   });
 
   if (!car) notFound();
+
+  const canPark = can(user, "edit.car") || can(user, "status.sales") || can(user, "status.tech");
+  const PARK_ERRORS: Record<string, string> = {
+    row: "Ряд — одна латинская буква A–Z.",
+    spot: "Номер места — положительное число.",
+    incomplete: "Укажите и ряд, и номер места (или очистите оба).",
+    taken: "Это место уже занято другим непроданным авто.",
+  };
 
   const expensesTotal = sumMoney(car.expenses.map((e) => e.amountGross));
   const cost = carCost(car);
@@ -66,6 +86,7 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
         </Link>
         <div className="mt-2 flex items-start justify-between gap-4">
           <div>
+            <div className="mono mb-1 text-[13px] font-bold text-muted">{internalCode(car)}</div>
             <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">
               {car.make} {car.model}
             </h1>
@@ -318,11 +339,12 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
             <p className="mb-4 text-[13px] text-muted">Нажмите, чтобы изменить.</p>
             <div className="flex flex-wrap gap-2">
               {CAR_STATUS_ORDER.map((s) => {
-                // Кнопки статусов — по правам роли (зеркалит проверку в setCarStatus):
-                // SALES — продажные, TECHNICAL — подготовительные, ADMIN/PARTNER — все.
+                // Кнопки статусов зеркалят серверную проверку setCarStatus:
+                // ADMIN/PARTNER — все; SALES — фото/бронь/продажа; TECHNICAL — подготовка/сервис.
                 const allowed =
-                  (can(user, "status.sales") && ["RESERVED", "SOLD", "AVAILABLE"].includes(s)) ||
-                  (can(user, "status.tech") && ["PREP", "AVAILABLE"].includes(s));
+                  can(user, "edit.car") ||
+                  (can(user, "status.sales") && SALES_STATUS_SET.includes(s)) ||
+                  (can(user, "status.tech") && TECH_STATUS_SET.includes(s));
                 if (!allowed && s !== car.status) return null;
                 return (
                   <form key={s} action={setCarStatus.bind(null, car.id, s)}>
@@ -339,6 +361,60 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
                 );
               })}
             </div>
+          </section>
+
+          <section className="panel animate-in delay-4 p-5">
+            <div className="mb-1 flex items-baseline justify-between">
+              <h2 className="text-[15px] font-bold">Парковка</h2>
+              <span className="mono text-[13px] text-muted">{mhCode(car.mhNumber)}</span>
+            </div>
+            <p className="mb-3 text-[13px] text-muted">
+              {car.parkingRow && car.parkingSpot != null
+                ? `Место: ${car.parkingRow}-${car.parkingSpot}`
+                : "Место не назначено (авто в дороге / на приёмке)."}
+            </p>
+            {perror && PARK_ERRORS[perror] && (
+              <div className="mb-3 rounded-lg border border-[rgba(248,113,113,0.3)] bg-[var(--red-dim)] px-3 py-2 text-[12px] text-red">
+                {PARK_ERRORS[perror]}
+              </div>
+            )}
+            {canPark && car.status !== "SOLD" && (
+              <form action={assignParking.bind(null, car.id)} className="flex gap-2">
+                <input
+                  name="parkingRow"
+                  maxLength={1}
+                  defaultValue={car.parkingRow ?? ""}
+                  className="field mono w-[56px] text-center uppercase"
+                  placeholder="A"
+                />
+                <input
+                  name="parkingSpot"
+                  type="number"
+                  min={1}
+                  defaultValue={car.parkingSpot ?? ""}
+                  className="field mono w-[80px]"
+                  placeholder="12"
+                />
+                <button type="submit" className="btn btn-ghost">Сохранить</button>
+              </form>
+            )}
+            {car.parkingMoves.length > 0 && (
+              <div className="mt-4 border-t border-line pt-3">
+                <div className="label mb-2">История перемещений</div>
+                <div className="flex flex-col gap-1.5 text-[12px] text-muted">
+                  {car.parkingMoves.map((m) => (
+                    <div key={m.id} className="flex justify-between gap-2">
+                      <span className="mono">
+                        {m.fromRow && m.fromSpot != null ? `${m.fromRow}-${m.fromSpot}` : "—"}
+                        {" → "}
+                        {m.toRow && m.toSpot != null ? `${m.toRow}-${m.toSpot}` : "—"}
+                      </span>
+                      <span>{fmtDate(m.movedAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </div>

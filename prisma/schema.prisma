@@ -17,15 +17,23 @@ model Car {
   color         String?
   transmission  String?
   fuel          String?
-  engineVol     Float?    // legacy: скрыт из UI в фазе 3, поле оставлено
+  engineVol     Float?    // legacy: скрыт из UI, поле оставлено (Требования §6.2)
   // Деньги — Decimal(12,2), EUR (Требования §2.7). Наследие Int переведено миграцией.
   purchasePrice Decimal   @db.Decimal(12, 2)
   listPrice     Decimal   @db.Decimal(12, 2)
-  status        String    @default("PREP") // PREP | AVAILABLE | RESERVED | SOLD (8 статусов — фаза 3)
+  // 8 складских статусов (§6.1). PURCHASED|IN_TRANSIT|IN_PREPARATION|IN_SERVICE|
+  // WAITING_FOR_PHOTOS|READY_FOR_SALE|RESERVED|SOLD (+ ARCHIVED — soft-delete, не витрина).
+  status        String    @default("PURCHASED")
   notes         String?
   createdAt     DateTime  @default(now())
 
-  // Налоговый режим и канал закупки (§10). Условная логика каналов — фаза 3.
+  // Парковочный учёт (§7). MH-код неизменяем, место можно менять.
+  mhNumber      Int       @unique @default(autoincrement())
+  parkingRow    String?   // одна латинская буква A–Z (uppercase)
+  parkingSpot   Int?      // положительное целое
+  parkingMoves  ParkingMove[]
+
+  // Налоговый режим и канал закупки (§10).
   taxScheme     String    @default("DIFFERENZBESTEUERUNG") // DIFFERENZBESTEUERUNG | REGELBESTEUERUNG | UNGEKLAERT
   purchaseChannel String? // PRIVAT | AUKTION | HAENDLER | INZAHLUNGNAHME | IMPORT
   currentOwner  String    @default("MOTORHOF_OG") // MRIYA_MOTORS | A_MOTORS | AUTOHUB | MOTORHOF_OG (§9)
@@ -39,6 +47,21 @@ model Car {
   expenses      Expense[]
   deals         Deal[]
   tasks         Task[]
+}
+
+// История перемещений по парковке (§7): кто, когда, откуда и куда.
+model ParkingMove {
+  id        String   @id @default(cuid())
+  car       Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+  carId     String
+  fromRow   String?
+  fromSpot  Int?
+  toRow     String?
+  toSpot    Int?
+  movedAt   DateTime @default(now())
+  userId    String?
+
+  @@index([carId])
 }
 
 model Expense {
