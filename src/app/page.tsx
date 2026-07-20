@@ -7,7 +7,6 @@ import {
   sumMoney,
   dueLabel,
   isOverdue,
-  dealMargin,
   CAR_STATUS,
   CAR_STATUS_ORDER,
   DEAL_STAGES,
@@ -25,16 +24,16 @@ export default async function Dashboard() {
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const [cars, activeDeals, doneDealsMonth, openTasks, dealsTotal, tasksTotal] = await Promise.all([
+  const [cars, activeDeals, salesMonth, openTasks, dealsTotal, tasksTotal] = await Promise.all([
     prisma.car.findMany({ include: { expenses: true } }),
     prisma.deal.findMany({
       where: { stage: { notIn: ["DONE", "LOST"] } },
       include: { client: true, car: true },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.deal.findMany({
-      where: { stage: "DONE", closedAt: { gte: monthStart }, type: { not: "PURCHASE" } },
-      include: { car: { include: { expenses: true } } },
+    // §18/§5: продажи и маржа месяца — по Sale (источник истины), не по Deal.
+    prisma.sale.findMany({
+      where: { stage: "COMPLETED", saleDate: { gte: monthStart } },
     }),
     // Без take/orderBy по dueDate: SQLite ставит NULL первыми, и бессрочные задачи
     // вытеснили бы просроченные из списка. Сортируем в JS — срочное наверх, «без срока» вниз.
@@ -64,10 +63,15 @@ export default async function Dashboard() {
   const inStock = cars.filter((c) => c.status !== "SOLD");
   const stockValue = sumMoney(inStock.map((c) => c.listPrice));
 
-  // Выручка и маржа месяца — по фактической цене продажи (сумма закрытой сделки),
-  // маржа по новым налоговым формулам (finance.ts).
-  const revenue = sumMoney(doneDealsMonth.map((d) => d.amount));
-  const margin = sumMoney(doneDealsMonth.map((d) => dealMargin(d.amount, d.car)));
+  // Выручка и маржа месяца — по фактической цене продажи Sale и её замороженному
+  // financial snapshot (§18.2): исторические продажи не меняются от настроек ставки.
+  const revenue = sumMoney(salesMonth.map((s) => s.actualSalePriceGross));
+  const margin = sumMoney(
+    salesMonth.map((s) => {
+      const snap = s.financialSnapshot as { finalMargin?: string } | null;
+      return snap?.finalMargin != null ? Number(snap.finalMargin) : 0;
+    })
+  );
 
   const pipelineValue = sumMoney(activeDeals.map((d) => d.amount));
 
@@ -95,7 +99,7 @@ export default async function Dashboard() {
           },
           {
             label: "Продано за месяц",
-            value: String(doneDealsMonth.length),
+            value: String(salesMonth.length),
             sub: `выручка ${fmtMoney(revenue)}`,
           },
         ]

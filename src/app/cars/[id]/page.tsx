@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
-import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus, assignParking, createPickerlTask, uploadCarFile, deleteCarFile } from "@/lib/actions";
+import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus, assignParking, createPickerlTask, uploadCarFile, deleteCarFile, reserveCar, completeSale, cancelSale } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import { storageConfigured } from "@/lib/storage";
@@ -29,6 +29,12 @@ import {
   CAR_STATUS_ORDER,
   SALES_STATUS_SET,
   TECH_STATUS_SET,
+  SALE_FLOW_STATUSES,
+  SALE_STAGE,
+  PAYMENT_STATUS,
+  PAYMENT_METHOD,
+  SALE_CATEGORY,
+  reservationExpired,
   STAGE_LABEL,
   DEAL_TYPE,
   TAX_SCHEME,
@@ -40,6 +46,7 @@ import {
   SERVICEHEFT,
   JA_NEIN_UNBEKANNT,
   BODY_PART_LABEL,
+  type SaleSnapshot,
 } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -49,10 +56,10 @@ export default async function CarPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ perror?: string; pickerl?: string; ferror?: string }>;
+  searchParams: Promise<{ perror?: string; pickerl?: string; ferror?: string; serror?: string }>;
 }) {
   const { id } = await params;
-  const { perror, pickerl, ferror } = await searchParams;
+  const { perror, pickerl, ferror, serror } = await searchParams;
   const user = await requireUser();
 
   // Redaction (roles-motorhof.md): запрещённые блоки НЕ рендерятся на сервере —
@@ -71,10 +78,22 @@ export default async function CarPage({
       deals: { include: { client: true }, orderBy: { createdAt: "desc" } },
       parkingMoves: { orderBy: { movedAt: "desc" }, take: 6 },
       files: { orderBy: { createdAt: "asc" } },
+      sales: { include: { client: true, employee: true }, orderBy: { createdAt: "desc" } },
     },
   });
 
   if (!car) notFound();
+
+  // Бронь и продажа (§18). Активная бронь / завершённая продажа + справочники для форм.
+  const canSell = can(user, "sell");
+  const reservedSale = car.sales.find((s) => s.stage === "RESERVED") ?? null;
+  const completedSale = car.sales.find((s) => s.stage === "COMPLETED") ?? null;
+  const [clients, employees] = canSell
+    ? await Promise.all([
+        prisma.client.findMany({ orderBy: { name: "asc" } }),
+        prisma.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      ])
+    : [[], []];
 
   // Файлы (§8.5). Финансовые документы прячем от SALES/TECHNICAL.
   const seeFinDocs = can(user, "see.acquisition");
@@ -125,6 +144,62 @@ export default async function CarPage({
   // Владелец и внутренняя продажа e.U. → OG (§9).
   const isPartner = isPartnerOwner(car.currentOwner);
   const supplierFin = seeInternal && isPartner ? supplierFinance(car) : null;
+
+  // Бронь/продажа (§18) — производные для форм и сводки.
+  const seeMinPrice = can(user, "see.minPrice");
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultSalePrice = (car.plannedSalePriceGross ?? car.listPrice).toString();
+  const saleSnap = (completedSale?.financialSnapshot ?? null) as SaleSnapshot | null;
+  const reservationIsExpired = reservedSale ? reservationExpired(reservedSale) : false;
+
+  // Форма продажи (§18.2), переиспользуется для «продать сразу» и «продать из брони».
+  const sellForm = (defaultClientId: string | null) => (
+    <form action={completeSale.bind(null, car.id)} className="mt-3 flex flex-col gap-2.5">
+      <select name="clientId" required className="field text-[13px]" defaultValue={defaultClientId ?? ""}>
+        <option value="" disabled>Покупатель *</option>
+        {clients.map((c) => (<option key={c.id} value={c.id}>{c.name} · {c.phone}</option>))}
+      </select>
+      <div className="flex gap-2">
+        <label className="flex-1"><span className="label">Цена продажи * €</span>
+          <input type="number" step="0.01" min={0} name="actualSalePriceGross" required defaultValue={defaultSalePrice} className="field mono" /></label>
+        <label className="flex-1"><span className="label">Пробег при продаже</span>
+          <input type="number" min={0} name="mileageAtSale" defaultValue={car.mileage} className="field mono" /></label>
+      </div>
+      <div className="flex gap-2">
+        <label className="flex-1"><span className="label">Дата продажи</span>
+          <input type="date" name="saleDate" defaultValue={today} className="field" /></label>
+        <label className="flex-1"><span className="label">Выдача *</span>
+          <input type="date" name="deliveryDate" required defaultValue={today} className="field" /></label>
+      </div>
+      <div className="flex gap-2">
+        <label className="flex-1"><span className="label">Статус оплаты *</span>
+          <select name="paymentStatus" required className="field" defaultValue="">
+            <option value="" disabled>—</option>
+            {Object.entries(PAYMENT_STATUS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+          </select></label>
+        <label className="flex-1"><span className="label">Способ оплаты *</span>
+          <select name="paymentMethod" required className="field" defaultValue="">
+            <option value="" disabled>—</option>
+            {Object.entries(PAYMENT_METHOD).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+          </select></label>
+      </div>
+      <div className="flex gap-2">
+        <label className="flex-1"><span className="label">Категория *</span>
+          <select name="saleCategory" required className="field" defaultValue="">
+            <option value="" disabled>—</option>
+            {Object.entries(SALE_CATEGORY).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+          </select></label>
+        <label className="flex-1"><span className="label">Менеджер</span>
+          <select name="employeeUserId" className="field" defaultValue={user.id}>
+            {employees.map((e) => (<option key={e.id} value={e.id}>{e.name}</option>))}
+          </select></label>
+      </div>
+      {car.minimumSalePriceGross && seeMinPrice && (
+        <p className="text-[12px] text-muted">Mindestpreis {fmtMoney(car.minimumSalePriceGross)} — продажа ниже требует override PARTNER/ADMIN.</p>
+      )}
+      <button type="submit" className="btn btn-primary">Оформить продажу</button>
+    </form>
+  );
 
   // Канал закупки (§11) — детали видны под see.acquisition.
   const feeGross = auctionFeeGross(car);
@@ -182,6 +257,20 @@ export default async function CarPage({
             : ferror === "filesize"
               ? "Файл слишком большой (максимум 12 МБ)."
               : "Не удалось загрузить файл — выберите файл и повторите."}
+        </div>
+      )}
+
+      {serror && (
+        <div className="animate-in mb-4 rounded-xl border border-[rgba(248,113,113,0.3)] bg-[var(--red-dim)] px-4 py-3 text-[14px] text-red">
+          {serror === "reserve-fields"
+            ? "Для брони укажите клиента и срок действия брони."
+            : serror === "already-reserved"
+              ? "Авто уже забронировано — сначала отмените текущую бронь."
+              : serror === "sale-fields"
+                ? "Заполните обязательные поля продажи: клиент, цена, дата поставки, статус и способ оплаты, категория."
+                : serror === "below-min"
+                  ? "Цена ниже Mindestverkaufspreis — нужен override роли PARTNER/ADMIN."
+                  : "Не удалось выполнить действие."}
         </div>
       )}
 
@@ -687,17 +776,133 @@ export default async function CarPage({
           </section>
           )}
 
+          {/* Продажа и бронь (§18) */}
+          {(canSell || completedSale || reservedSale) && (
+            <section className="panel animate-in delay-2 p-5">
+              <h2 className="mb-4 text-[15px] font-bold">Продажа и бронь</h2>
+
+              {completedSale ? (
+                <div>
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className={`chip ${SALE_STAGE.COMPLETED.cls}`}>{SALE_STAGE.COMPLETED.label}</span>
+                    {car.awaitingInternalInvoice && <span className="chip chip-amber">ожидает внутр. счёт</span>}
+                  </div>
+                  <dl className="flex flex-col gap-2 text-[14px]">
+                    <div className="flex justify-between gap-3"><dt className="text-muted">Покупатель</dt><dd>{completedSale.client?.name ?? "—"}</dd></div>
+                    {seeSalePrice && completedSale.actualSalePriceGross && (
+                      <div className="flex justify-between gap-3"><dt className="text-muted">Цена продажи</dt><dd className="mono font-bold">{fmtMoney(completedSale.actualSalePriceGross)}</dd></div>
+                    )}
+                    {completedSale.saleDate && (
+                      <div className="flex justify-between gap-3"><dt className="text-muted">Дата продажи</dt><dd>{fmtDate(completedSale.saleDate)}</dd></div>
+                    )}
+                    {completedSale.deliveryDate && (
+                      <div className="flex justify-between gap-3"><dt className="text-muted">Выдача</dt><dd>{fmtDate(completedSale.deliveryDate)}</dd></div>
+                    )}
+                    {completedSale.saleCategory && (
+                      <div className="flex justify-between gap-3"><dt className="text-muted">Категория</dt><dd>{SALE_CATEGORY[completedSale.saleCategory] ?? completedSale.saleCategory}</dd></div>
+                    )}
+                    <div className="flex justify-between gap-3"><dt className="text-muted">Оплата</dt><dd>{[completedSale.paymentStatus && PAYMENT_STATUS[completedSale.paymentStatus], completedSale.paymentMethod && PAYMENT_METHOD[completedSale.paymentMethod]].filter(Boolean).join(" · ") || "—"}</dd></div>
+                    {completedSale.mileageAtSale != null && (
+                      <div className="flex justify-between gap-3"><dt className="text-muted">Пробег при продаже</dt><dd className="mono">{completedSale.mileageAtSale.toLocaleString("ru-RU")} км</dd></div>
+                    )}
+                    {completedSale.employee && (
+                      <div className="flex justify-between gap-3"><dt className="text-muted">Менеджер</dt><dd>{completedSale.employee.name}</dd></div>
+                    )}
+                  </dl>
+                  {seeMoney && saleSnap && (
+                    <div className="mt-4 rounded-xl border border-line bg-surface-2 p-4">
+                      <div className="label mb-1">Маржа (снимок на момент продажи)</div>
+                      <div className={`mono text-[22px] font-bold leading-none ${Number(saleSnap.finalMargin) >= 0 ? "text-green" : "text-red"}`}>
+                        {fmtMoney(Number(saleSnap.finalMargin))}
+                      </div>
+                      <div className="mt-1.5 text-[12px] text-muted">{saleSnap.vatLabel} {fmtMoney(Number(saleSnap.vatAmount))} · заморожено</div>
+                    </div>
+                  )}
+                </div>
+              ) : reservedSale ? (
+                <div>
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className={`chip ${SALE_STAGE.RESERVED.cls}`}>{SALE_STAGE.RESERVED.label}</span>
+                    {reservationIsExpired && <span className="chip chip-red">срок брони истёк</span>}
+                  </div>
+                  <dl className="flex flex-col gap-2 text-[14px]">
+                    <div className="flex justify-between gap-3"><dt className="text-muted">Клиент</dt><dd>{reservedSale.client?.name ?? "—"}</dd></div>
+                    {reservedSale.reservationExpiresAt && (
+                      <div className="flex justify-between gap-3"><dt className="text-muted">Действует до</dt><dd className={reservationIsExpired ? "text-red" : ""}>{fmtDate(reservedSale.reservationExpiresAt)}</dd></div>
+                    )}
+                    {seeSalePrice && reservedSale.anzahlung && (
+                      <div className="flex justify-between gap-3"><dt className="text-muted">Anzahlung</dt><dd className="mono">{fmtMoney(reservedSale.anzahlung)}</dd></div>
+                    )}
+                    {reservedSale.reservationComment && (
+                      <div className="flex justify-between gap-3"><dt className="text-muted">Комментарий</dt><dd className="text-right">{reservedSale.reservationComment}</dd></div>
+                    )}
+                  </dl>
+                  {canSell && (
+                    <div className="mt-4 flex flex-col gap-2">
+                      <details className="rounded-xl border border-line bg-surface-2 p-3">
+                        <summary className="cursor-pointer text-[13px] font-semibold">Оформить продажу</summary>
+                        {sellForm(reservedSale.clientId)}
+                      </details>
+                      <form action={cancelSale.bind(null, reservedSale.id, car.id)}>
+                        <button type="submit" className="btn btn-ghost w-full !text-[13px]">Отменить бронь</button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              ) : canSell && car.status !== "SOLD" && car.status !== "ARCHIVED" ? (
+                <div className="flex flex-col gap-2">
+                  <details className="rounded-xl border border-line bg-surface-2 p-3">
+                    <summary className="cursor-pointer text-[13px] font-semibold">Забронировать</summary>
+                    <form action={reserveCar.bind(null, car.id)} className="mt-3 flex flex-col gap-2.5">
+                      <select name="clientId" required className="field text-[13px]" defaultValue="">
+                        <option value="" disabled>Клиент *</option>
+                        {clients.map((c) => (<option key={c.id} value={c.id}>{c.name} · {c.phone}</option>))}
+                      </select>
+                      <div className="flex gap-2">
+                        <label className="flex-1"><span className="label">Дата брони</span>
+                          <input type="date" name="reservedAt" defaultValue={today} className="field" /></label>
+                        <label className="flex-1"><span className="label">Действует до *</span>
+                          <input type="date" name="reservationExpiresAt" required className="field" /></label>
+                      </div>
+                      <div className="flex gap-2">
+                        <label className="flex-1"><span className="label">Anzahlung €</span>
+                          <input type="number" step="0.01" min={0} name="anzahlung" className="field mono" /></label>
+                        <label className="flex-1"><span className="label">Способ оплаты</span>
+                          <select name="reservationPaymentMethod" className="field" defaultValue="">
+                            <option value="">—</option>
+                            {Object.entries(PAYMENT_METHOD).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+                          </select></label>
+                      </div>
+                      <input name="reservationComment" className="field" placeholder="Комментарий" />
+                      <button type="submit" className="btn btn-primary">Забронировать</button>
+                    </form>
+                  </details>
+                  <details className="rounded-xl border border-line bg-surface-2 p-3">
+                    <summary className="cursor-pointer text-[13px] font-semibold">Оформить продажу</summary>
+                    {sellForm(null)}
+                  </details>
+                </div>
+              ) : (
+                <p className="text-[13px] text-muted">Нет активной брони или продажи.</p>
+              )}
+            </section>
+          )}
+
           <section className="panel animate-in delay-3 p-5">
             <h2 className="mb-1 text-[15px] font-bold">Статус</h2>
             <p className="mb-4 text-[13px] text-muted">Нажмите, чтобы изменить.</p>
             <div className="flex flex-wrap gap-2">
               {CAR_STATUS_ORDER.map((s) => {
+                // RESERVED/SOLD ставятся только через раздел «Продажа и бронь» (§18) —
+                // прямой кнопкой не переключаем (показываем лишь как текущий статус).
+                if (SALE_FLOW_STATUSES.includes(s) && s !== car.status) return null;
                 // Кнопки статусов зеркалят серверную проверку setCarStatus:
-                // ADMIN/PARTNER — все; SALES — фото/бронь/продажа; TECHNICAL — подготовка/сервис.
+                // ADMIN/PARTNER — все; SALES — фото; TECHNICAL — подготовка/сервис.
                 const allowed =
-                  can(user, "edit.car") ||
-                  (can(user, "status.sales") && SALES_STATUS_SET.includes(s)) ||
-                  (can(user, "status.tech") && TECH_STATUS_SET.includes(s));
+                  !SALE_FLOW_STATUSES.includes(s) &&
+                  (can(user, "edit.car") ||
+                    (can(user, "status.sales") && SALES_STATUS_SET.includes(s)) ||
+                    (can(user, "status.tech") && TECH_STATUS_SET.includes(s)));
                 if (!allowed && s !== car.status) return null;
                 return (
                   <form key={s} action={setCarStatus.bind(null, car.id, s)}>

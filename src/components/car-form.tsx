@@ -21,6 +21,8 @@ export const CAR_FORM_ERRORS: Record<string, string> = {
     "Дата поступления раньше даты покупки. Поставьте галочку override и укажите причину в секции «Основные данные».",
   "auction-below":
     "Auktionsrechnung gesamt меньше Fahrzeugpreis. Поставьте галочку override и укажите причину в секции «Auktion».",
+  "sold-locked":
+    "Авто уже продано — правка финансовых полей задним числом требует admin override. Поставьте галочку и укажите причину в секции «Деньги».",
 };
 
 // Decimal → строка для value; Date → YYYY-MM-DD; число → строка (пусто = Unbekannt).
@@ -218,6 +220,16 @@ export function CarForm({
             <label className="label" htmlFor="listPrice">Цена продажи * €</label>
             <input id="listPrice" name="listPrice" type="number" step="0.01" required min={0} defaultValue={m(car?.listPrice)} className="field mono" placeholder="15500" />
           </div>
+        </div>
+        {/* §18.2: правка финансов уже проданного авто — только admin override с причиной. */}
+        <div className="mt-3 rounded-lg border border-line bg-surface-2 p-3">
+          <label className="flex items-start gap-2 text-[13px]">
+            <input type="checkbox" name="soldOverride" value="1" className="mt-0.5" />
+            <span className="text-muted">
+              Разрешить правку финансовых полей у уже проданного авто (admin override — нужна причина).
+            </span>
+          </label>
+          <input name="soldOverrideReason" className="field mt-2" placeholder="Причина override (если ставите галочку)" />
         </div>
       </section>
 

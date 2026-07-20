@@ -10,9 +10,11 @@ import {
   CAR_STATUS_ORDER,
   SALES_STATUS_SET,
   TECH_STATUS_SET,
+  SALE_FLOW_STATUSES,
   pickerlNeedsAttention,
   isPartnerOwner,
   internalInvoiceComplete,
+  buildSaleSnapshot,
 } from "./format";
 
 // Заголовок автозадачи Pickerl — по нему ищем дубликаты (§8.4).
@@ -299,6 +301,22 @@ export async function updateCar(id: string, fd: FormData) {
   if (err) redirect(`/cars/${id}/edit?ferror=${err}`);
 
   const before = await prisma.car.findUnique({ where: { id } });
+
+  // §18.2: после завершённой продажи ключевые финансовые поля нельзя менять задним
+  // числом без admin override (снимок продажи заморожен, но исходные поля защищаем).
+  if (before) {
+    const sold = await prisma.sale.findFirst({ where: { carId: id, stage: "COMPLETED" } });
+    const financialChanged =
+      before.purchasePrice.toString() !== data.purchasePrice ||
+      before.listPrice.toString() !== data.listPrice ||
+      (before.einkaufspreisGemaess24?.toString() ?? null) !== (data.einkaufspreisGemaess24 ?? null) ||
+      (before.minimumSalePriceGross?.toString() ?? null) !== (data.minimumSalePriceGross ?? null) ||
+      before.taxScheme !== data.taxScheme;
+    if (sold && financialChanged && !(str(fd, "soldOverride") === "1" && str(fd, "soldOverrideReason"))) {
+      redirect(`/cars/${id}/edit?ferror=sold-locked`);
+    }
+  }
+
   await prisma.car.update({ where: { id }, data });
   await audit(user.id, "Car", id, "update", {
     before: before
@@ -319,7 +337,7 @@ export async function updateCar(id: string, fd: FormData) {
       currentOwner: data.currentOwner,
       status: data.status,
     },
-    reason: str(fd, "dateOverrideReason") ?? str(fd, "auctionOverrideReason") ?? undefined,
+    reason: str(fd, "dateOverrideReason") ?? str(fd, "auctionOverrideReason") ?? str(fd, "soldOverrideReason") ?? undefined,
   });
   revalidateAll();
   redirect(`/cars/${id}${await pickerlAskSuffix(id, data)}`);
@@ -418,53 +436,25 @@ export async function createPickerlTask(carId: string) {
 // ADMIN/PARTNER (edit.car) получают все статусы, включая приёмку (Куплен / В дороге).
 export async function setCarStatus(id: string, status: string) {
   const user = await requireCan("status.sales", "status.tech", "edit.car");
+  // Бронь и продажа (RESERVED/SOLD) ставятся только через поток §18 (reserveCar/
+  // completeSale) — там собираются обязательные поля и financial snapshot.
+  if (SALE_FLOW_STATUSES.includes(status)) {
+    throw new Error("Бронь и продажа оформляются в разделе «Продажа» карточки авто");
+  }
   const allowed = new Set<string>();
   if (can(user, "edit.car")) CAR_STATUS_ORDER.forEach((s) => allowed.add(s));
   if (can(user, "status.sales")) SALES_STATUS_SET.forEach((s) => allowed.add(s));
   if (can(user, "status.tech")) TECH_STATUS_SET.forEach((s) => allowed.add(s));
+  allowed.delete("RESERVED");
+  allowed.delete("SOLD");
   if (!allowed.has(status)) throw new Error("Ваша роль не может установить этот статус");
 
-  const before = await prisma.car.findUnique({
-    where: { id },
-    select: {
-      status: true, parkingRow: true, parkingSpot: true,
-      currentOwner: true, actualInternalTransferPrice: true, internalInvoiceNumber: true,
-    },
-  });
+  const before = await prisma.car.findUnique({ where: { id }, select: { status: true } });
   if (!before) return;
-
-  // Продажа освобождает активное парковочное место, история сохраняется (§18.2).
-  const freeParking = status === "SOLD" && (before.parkingRow || before.parkingSpot != null);
-  // §9: продажа партнёрского авто без завершённого внутреннего счёта e.U.→OG →
-  // пометка «ожидает внутренний счёт» (статус остаётся SOLD, незавершённость видна).
-  const awaitingInvoice =
-    status === "SOLD" &&
-    isPartnerOwner(before.currentOwner) &&
-    !internalInvoiceComplete(before);
-  await prisma.car.update({
-    where: { id },
-    data: {
-      status,
-      ...(freeParking ? { parkingRow: null, parkingSpot: null } : {}),
-      ...(status === "SOLD" ? { awaitingInternalInvoice: awaitingInvoice } : {}),
-    },
-  });
-  if (freeParking) {
-    await prisma.parkingMove.create({
-      data: {
-        carId: id,
-        fromRow: before.parkingRow,
-        fromSpot: before.parkingSpot,
-        toRow: null,
-        toSpot: null,
-        userId: user.id,
-      },
-    });
-  }
+  await prisma.car.update({ where: { id }, data: { status } });
   await audit(user.id, "Car", id, "status", {
     before: { status: before.status },
-    after: { status, awaitingInternalInvoice: awaitingInvoice || undefined },
-    reason: awaitingInvoice ? "Партнёрское авто продано без внутреннего счёта e.U.→OG — ожидает счёт (§9)" : undefined,
+    after: { status },
   });
   revalidateAll();
 }
@@ -523,6 +513,135 @@ export async function deleteCar(id: string) {
   });
   revalidateAll();
   redirect("/cars");
+}
+
+// ─── Бронь и продажа (§18) ─────────────────────────────────────
+
+/** Бронь авто (§18.1). Обязательны клиент и срок действия; авто → RESERVED. */
+export async function reserveCar(carId: string, fd: FormData) {
+  const user = await requireCan("sell"); // капабилити "sell" покрывает брони и продажи
+  const clientId = str(fd, "clientId");
+  const expires = date(fd, "reservationExpiresAt");
+  if (!clientId || !expires) redirect(`/cars/${carId}?serror=reserve-fields`);
+
+  // Одна активная бронь на авто: сначала отменить старую (§18.1).
+  const active = await prisma.sale.findFirst({ where: { carId, stage: "RESERVED" } });
+  if (active) redirect(`/cars/${carId}?serror=already-reserved`);
+
+  const sale = await prisma.sale.create({
+    data: {
+      carId,
+      clientId,
+      stage: "RESERVED",
+      reservedAt: date(fd, "reservedAt") ?? new Date(),
+      reservationExpiresAt: expires,
+      anzahlung: money(fd, "anzahlung"),
+      reservationPaymentMethod: str(fd, "reservationPaymentMethod"),
+      reservationComment: str(fd, "reservationComment"),
+    },
+  });
+  await prisma.car.update({ where: { id: carId }, data: { status: "RESERVED" } });
+  await audit(user.id, "Sale", sale.id, "reserve", {
+    after: { carId, clientId, expiresAt: expires.toISOString() },
+  });
+  revalidateAll();
+  redirect(`/cars/${carId}`);
+}
+
+/**
+ * Продажа авто (§18.2). Обязательные поля, financial snapshot (замораживает маржу),
+ * Mindestverkaufspreis-блок с override, освобождение парковки, автозакрытие задач,
+ * §9 awaitingInternalInvoice для партнёрских авто. Активная бронь конвертируется в продажу.
+ */
+export async function completeSale(carId: string, fd: FormData) {
+  const user = await requireCan("sell");
+  const car = await prisma.car.findUnique({ where: { id: carId }, include: { expenses: true } });
+  if (!car) redirect("/cars");
+
+  const clientId = str(fd, "clientId");
+  const salePrice = money(fd, "actualSalePriceGross");
+  const saleDate = date(fd, "saleDate") ?? new Date();
+  const paymentStatus = str(fd, "paymentStatus");
+  const paymentMethod = str(fd, "paymentMethod");
+  const deliveryDate = date(fd, "deliveryDate");
+  const mileageAtSale = num(fd, "mileageAtSale") ?? car.mileage;
+  const saleCategory = str(fd, "saleCategory");
+  // Обязательные поля §18.2.
+  if (!clientId || !salePrice || !paymentStatus || !paymentMethod || !deliveryDate || !saleCategory) {
+    redirect(`/cars/${carId}?serror=sale-fields`);
+  }
+
+  // Mindestverkaufspreis (§13): продажа ниже минимума — блок для SALES, override PARTNER/ADMIN.
+  let overrideReason: string | undefined;
+  if (car.minimumSalePriceGross != null && new Decimal(salePrice!).lt(car.minimumSalePriceGross)) {
+    if (!can(user, "sell.belowMin")) redirect(`/cars/${carId}?serror=below-min`);
+    overrideReason = `Продажа ниже Mindestverkaufspreis (${car.minimumSalePriceGross.toString()}) за ${salePrice} — override PARTNER/ADMIN`;
+  }
+
+  const snapshot = buildSaleSnapshot(car, new Decimal(salePrice!));
+  const saleData = {
+    clientId,
+    stage: "COMPLETED",
+    actualSalePriceGross: salePrice,
+    saleDate,
+    paymentStatus,
+    paymentMethod,
+    deliveryDate,
+    mileageAtSale,
+    saleCategory,
+    taxSchemeSnapshot: car.taxScheme,
+    employeeUserId: str(fd, "employeeUserId") ?? user.id,
+    financialSnapshot: snapshot as unknown as object,
+  };
+
+  // Активная бронь → конвертируем в продажу; иначе новая запись.
+  const active = await prisma.sale.findFirst({ where: { carId, stage: "RESERVED" } });
+  const sale = active
+    ? await prisma.sale.update({ where: { id: active.id }, data: saleData })
+    : await prisma.sale.create({ data: { carId, ...saleData } });
+
+  // §9: партнёрское авто без завершённого внутр. счёта → «ожидает внутренний счёт».
+  const awaitingInvoice = isPartnerOwner(car.currentOwner) && !internalInvoiceComplete(car);
+  const freeParking = car.parkingRow || car.parkingSpot != null;
+  await prisma.car.update({
+    where: { id: carId },
+    data: {
+      status: "SOLD",
+      awaitingInternalInvoice: awaitingInvoice,
+      ...(freeParking ? { parkingRow: null, parkingSpot: null } : {}),
+    },
+  });
+  if (freeParking) {
+    await prisma.parkingMove.create({
+      data: { carId, fromRow: car.parkingRow, fromSpot: car.parkingSpot, toRow: null, toSpot: null, userId: user.id },
+    });
+  }
+  // §18.2: закрыть незавершённые подготовительные задачи по авто.
+  await prisma.task.updateMany({ where: { carId, done: false }, data: { done: true } });
+
+  await audit(user.id, "Sale", sale.id, overrideReason ? "sell-below-min-override" : "sell", {
+    after: { carId, clientId, salePrice, finalMargin: snapshot.finalMargin, awaitingInternalInvoice: awaitingInvoice || undefined },
+    reason: overrideReason,
+  });
+  revalidateAll();
+  redirect(`/cars/${carId}`);
+}
+
+/** Отмена активной брони (§18.1): soft (CANCELLED) + возврат авто в продажу с аудитом. */
+export async function cancelSale(saleId: string, carId: string) {
+  const user = await requireCan("sell");
+  const sale = await prisma.sale.findUnique({ where: { id: saleId } });
+  if (!sale) return;
+  if (sale.stage !== "RESERVED") {
+    // Завершённую продажу нельзя отменить обычной кнопкой (§21 soft-delete — только admin).
+    throw new Error("Отменить можно только активную бронь");
+  }
+  await prisma.sale.update({ where: { id: saleId }, data: { stage: "CANCELLED", cancelledAt: new Date() } });
+  // §18.1: не переводить статус автоматически без записи в историю — пишем аудит.
+  await prisma.car.update({ where: { id: carId }, data: { status: "READY_FOR_SALE" } });
+  await audit(user.id, "Sale", saleId, "cancel-reservation", { before: { stage: "RESERVED" }, after: { stage: "CANCELLED" } });
+  revalidateAll();
+  redirect(`/cars/${carId}`);
 }
 
 export async function addExpense(carId: string, fd: FormData) {
@@ -636,60 +755,24 @@ export async function createDeal(fd: FormData) {
   revalidateAll();
 }
 
+// Deal — воронка ЛИДОВ (§17), НЕ источник продажи. С фазы 3e статус авто и маржа
+// идут через Sale (§18): движение сделки по воронке НЕ меняет статус авто.
 export async function moveDealStage(id: string, dir: 1 | -1) {
   const user = await requireCan("sell");
-  const deal = await prisma.deal.findUnique({ where: { id }, include: { car: true } });
+  const deal = await prisma.deal.findUnique({ where: { id } });
   if (!deal) return;
   const order = DEAL_STAGES.map((s) => s.key);
   const idx = order.indexOf(deal.stage);
   // LOST не входит в воронку (idx === -1): стрелка утащила бы сделку в NEW молча.
-  // Для возврата в работу есть reopenDeal.
   if (idx === -1) return;
   const next = order[Math.min(Math.max(idx + dir, 0), order.length - 1)];
   if (next === deal.stage) return;
 
-  const closing = next === "DONE";
-
-  // Mindestverkaufspreis (roles-motorhof.md §3): закрытие продажи ниже минимума
-  // блокируется для SALES; PARTNER/ADMIN проходят, действие пишется как override.
-  let overrideReason: string | undefined;
-  if (
-    closing &&
-    deal.type !== "PURCHASE" &&
-    deal.car?.minimumSalePriceGross != null &&
-    deal.amount != null &&
-    deal.amount.lt(deal.car.minimumSalePriceGross)
-  ) {
-    if (!can(user, "sell.belowMin")) {
-      redirect("/deals?error=below-min");
-    }
-    overrideReason = `Продажа ниже Mindestverkaufspreis (${deal.car.minimumSalePriceGross.toString()}) за ${deal.amount.toString()} — override ролью PARTNER/ADMIN`;
-  }
-
   await prisma.deal.update({
     where: { id },
-    data: { stage: next, closedAt: closing ? new Date() : null },
+    data: { stage: next, closedAt: next === "DONE" ? new Date() : null },
   });
-  if (closing && deal.carId && deal.type !== "PURCHASE") {
-    // §9: партнёрское авто без завершённого внутреннего счёта → пометка «ожидает».
-    const awaitingInvoice =
-      deal.car != null &&
-      isPartnerOwner(deal.car.currentOwner) &&
-      !internalInvoiceComplete(deal.car);
-    await prisma.car.update({
-      where: { id: deal.carId },
-      data: { status: "SOLD", awaitingInternalInvoice: awaitingInvoice },
-    });
-  }
-  if (!closing && deal.carId && deal.stage === "DONE") {
-    // сделку вернули из "Закрыта" — авто снова в наличии
-    await prisma.car.update({ where: { id: deal.carId }, data: { status: "AVAILABLE" } });
-  }
-  await audit(user.id, "Deal", id, overrideReason ? "close-below-min-override" : "stage", {
-    before: { stage: deal.stage },
-    after: { stage: next },
-    reason: overrideReason,
-  });
+  await audit(user.id, "Deal", id, "stage", { before: { stage: deal.stage }, after: { stage: next } });
   revalidateAll();
 }
 
@@ -698,10 +781,6 @@ export async function loseDeal(id: string) {
   const deal = await prisma.deal.findUnique({ where: { id } });
   if (!deal) return;
   await prisma.deal.update({ where: { id }, data: { stage: "LOST", closedAt: new Date() } });
-  // Сделку теряют уже после закрытия — освобождаем авто обратно на склад.
-  if (deal.stage === "DONE" && deal.carId && deal.type !== "PURCHASE") {
-    await prisma.car.update({ where: { id: deal.carId }, data: { status: "AVAILABLE" } });
-  }
   await audit(user.id, "Deal", id, "lose", { before: { stage: deal.stage } });
   revalidateAll();
 }

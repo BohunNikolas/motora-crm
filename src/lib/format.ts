@@ -237,6 +237,37 @@ export const internalInvoiceComplete = (car: {
   internalInvoiceNumber: string | null;
 }): boolean => car.actualInternalTransferPrice != null && !!car.internalInvoiceNumber;
 
+// ─── Financial snapshot продажи (§18.2) ─────────────────────────
+// Замораживает финрасчёт на момент продажи: смена настроек ставки/цен позже
+// НЕ меняет историческую маржу. Деньги — строки (JSON-стабильно, без float).
+
+export type SaleSnapshot = {
+  taxScheme: string;
+  vatLabel: string;
+  acquisitionBasis: string;
+  salePriceGross: string;
+  vatAmount: string;
+  cost: string;
+  marginBeforeExpenses: string;
+  finalMargin: string;
+  isConfirmed: boolean;
+};
+
+export function buildSaleSnapshot(car: CarForFinance, salePriceGross: Num): SaleSnapshot {
+  const fin = carActualFinance(car, salePriceGross);
+  return {
+    taxScheme: fin.taxScheme,
+    vatLabel: car.taxScheme === "REGELBESTEUERUNG" ? "Ausgangs-USt" : "Differenz-USt",
+    acquisitionBasis: ogAcquisitionBasis(car).toString(),
+    salePriceGross: dec(salePriceGross).toString(),
+    vatAmount: fin.vatAmount.toString(),
+    cost: carCost(car).toString(),
+    marginBeforeExpenses: fin.marginBeforeExpenses.toString(),
+    finalMargin: fin.finalMargin.toString(),
+    isConfirmed: fin.isConfirmed,
+  };
+}
+
 // ─── Справочники ────────────────────────────────────────────────
 
 export const TRANSMISSIONS = ["АКПП", "МКПП", "Робот", "Вариатор"];
@@ -327,6 +358,41 @@ export const SURCHARGE_BY: Record<string, string> = {
   CLIENT: "Доплачивает клиент",
   MOTORHOF: "Доплачивает MOTORHOF",
 };
+
+// ─── Бронь и продажа (§18) ──────────────────────────────────────
+
+// Статусы, которые ставятся ТОЛЬКО через поток брони/продажи (§18), а не прямой
+// кнопкой статуса — источник истины для UI и серверного guard в setCarStatus.
+export const SALE_FLOW_STATUSES = ["RESERVED", "SOLD"];
+
+export const SALE_STAGE: Record<string, { label: string; cls: string }> = {
+  RESERVED: { label: "Бронь", cls: "chip-blue" },
+  COMPLETED: { label: "Продано", cls: "chip-green" },
+  CANCELLED: { label: "Отменена", cls: "chip-muted" },
+};
+export const PAYMENT_STATUS: Record<string, string> = {
+  OPEN: "Не оплачено",
+  PARTIAL: "Частично",
+  PAID: "Оплачено",
+};
+export const PAYMENT_METHOD: Record<string, string> = {
+  CASH: "Наличные",
+  TRANSFER: "Перевод",
+  FINANCING: "Финансирование",
+  CARD: "Карта",
+};
+export const SALE_CATEGORY: Record<string, string> = {
+  B2C: "B2C (частному лицу)",
+  B2B: "B2B (юрлицу)",
+  EXPORT: "Export",
+};
+
+/** Бронь просрочена: активна (RESERVED) и срок действия истёк (§18.1). */
+export const reservationExpired = (
+  sale: { stage: string; reservationExpiresAt: Date | null },
+  now: Date = new Date()
+): boolean =>
+  sale.stage === "RESERVED" && sale.reservationExpiresAt != null && new Date(sale.reservationExpiresAt) < now;
 
 /** Auktionsgebühr brutto = netto + USt (§11.2), справочно для отображения. */
 export const auctionFeeGross = (car: {

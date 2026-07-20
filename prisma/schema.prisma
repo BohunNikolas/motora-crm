@@ -125,6 +125,52 @@ model Car {
   deals         Deal[]
   tasks         Task[]
   files         CarFile[]
+  sales         Sale[]
+}
+
+// Бронь и продажа автомобиля (§18). Единый жизненный цикл: RESERVED → COMPLETED
+// (продано) либо CANCELLED (soft — не удаляем физически, §21). Одна активная Sale
+// на авто; новый покупатель = новая запись. Источник истины по продажам (реш. 20.07):
+// KPI дашборда «Продано/Маржа» считаются по Sale, воронка Deal остаётся для лидов.
+model Sale {
+  id        String   @id @default(cuid())
+  car       Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+  carId     String
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId  String?
+  stage     String   @default("RESERVED") // RESERVED | COMPLETED | CANCELLED
+
+  // Бронь (§18.1)
+  reservedAt               DateTime?
+  reservationExpiresAt     DateTime?
+  anzahlung                Decimal?  @db.Decimal(12, 2)
+  reservationPaymentMethod String?
+  reservationComment       String?
+
+  // Продажа (§18.2)
+  actualSalePriceGross Decimal?  @db.Decimal(12, 2)
+  saleDate             DateTime?
+  paymentStatus        String?   // OPEN | PARTIAL | PAID
+  paymentMethod        String?   // CASH | TRANSFER | FINANCING | CARD
+  deliveryDate         DateTime?
+  mileageAtSale        Int?
+  saleCategory         String?   // B2C | B2B | EXPORT
+  taxSchemeSnapshot    String?   // режим на момент продажи
+  employee             User?     @relation(fields: [employeeUserId], references: [id], onDelete: SetNull)
+  employeeUserId       String?
+
+  // Financial snapshot (§18.2): заморожен на момент продажи — последующая смена
+  // настроек ставки НЕ меняет историческую продажу.
+  financialSnapshot Json?
+
+  // Связь с исходным Deal при миграции (§22) — @unique для идемпотентности.
+  legacyDealId String? @unique
+
+  createdAt   DateTime  @default(now())
+  cancelledAt DateTime?
+
+  @@index([carId])
+  @@index([stage])
 }
 
 // Фото и документы авто (§8.5). Хранятся в R2 (ключ `key`), отдаются
@@ -192,6 +238,7 @@ model User {
   createdAt    DateTime @default(now())
   sessions     Session[]
   auditLogs    AuditLog[]
+  sales        Sale[]
 }
 
 model Session {
@@ -229,6 +276,7 @@ model Client {
   createdAt DateTime @default(now())
   deals     Deal[]
   tasks     Task[]
+  sales     Sale[]
 }
 
 model Deal {
