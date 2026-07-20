@@ -56,7 +56,12 @@ async function main() {
   await p.client.deleteMany();
 
   const car = (data, expenses = []) =>
-    p.car.create({ data: { ...data, expenses: { create: expenses } } });
+    p.car.create({
+      data: {
+        ...data,
+        expenses: { create: expenses.map((e) => ({ title: e.title, amountGross: e.amount })) },
+      },
+    });
 
   const [camry, rio, solaris, polo, mazda, octavia, duster, qashqai, rav4, focus] =
     await Promise.all([

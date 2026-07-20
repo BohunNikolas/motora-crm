@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import {
   fmtMoney,
+  sumMoney,
   dueLabel,
   isOverdue,
   dealMargin,
@@ -56,12 +57,14 @@ export default async function Dashboard() {
     .slice(0, 6);
 
   const inStock = cars.filter((c) => c.status !== "SOLD");
-  const stockValue = inStock.reduce((s, c) => s + c.listPrice, 0);
+  const stockValue = sumMoney(inStock.map((c) => c.listPrice));
 
-  const revenue = doneDealsMonth.reduce((s, d) => s + (d.amount ?? 0), 0);
-  const margin = doneDealsMonth.reduce((s, d) => s + (dealMargin(d.amount, d.car) ?? 0), 0);
+  // Выручка и маржа месяца — по фактической цене продажи (сумма закрытой сделки),
+  // маржа по новым налоговым формулам (finance.ts).
+  const revenue = sumMoney(doneDealsMonth.map((d) => d.amount));
+  const margin = sumMoney(doneDealsMonth.map((d) => dealMargin(d.amount, d.car)));
 
-  const pipelineValue = activeDeals.reduce((s, d) => s + (d.amount ?? 0), 0);
+  const pipelineValue = sumMoney(activeDeals.map((d) => d.amount));
 
   const stageCounts = DEAL_STAGES.filter((s) => s.key !== "DONE").map((s) => ({
     ...s,
@@ -88,7 +91,9 @@ export default async function Dashboard() {
     {
       label: "Маржа за месяц",
       value: fmtMoney(margin),
-      sub: revenue > 0 ? `${Math.round((margin / revenue) * 100)}% от выручки` : "нет продаж",
+      sub: revenue.gt(0)
+        ? `${Math.round(margin.div(revenue).times(100).toNumber())}% от выручки`
+        : "нет продаж",
       accent: true,
     },
   ];

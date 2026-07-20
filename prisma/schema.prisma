@@ -17,12 +17,25 @@ model Car {
   color         String?
   transmission  String?
   fuel          String?
-  engineVol     Float?
-  purchasePrice Int
-  listPrice     Int
-  status        String    @default("PREP") // PREP | AVAILABLE | RESERVED | SOLD
+  engineVol     Float?    // legacy: скрыт из UI в фазе 3, поле оставлено
+  // Деньги — Decimal(12,2), EUR (Требования §2.7). Наследие Int переведено миграцией.
+  purchasePrice Decimal   @db.Decimal(12, 2)
+  listPrice     Decimal   @db.Decimal(12, 2)
+  status        String    @default("PREP") // PREP | AVAILABLE | RESERVED | SOLD (8 статусов — фаза 3)
   notes         String?
   createdAt     DateTime  @default(now())
+
+  // Налоговый режим и канал закупки (§10). Условная логика каналов — фаза 3.
+  taxScheme     String    @default("DIFFERENZBESTEUERUNG") // DIFFERENZBESTEUERUNG | REGELBESTEUERUNG | UNGEKLAERT
+  purchaseChannel String? // PRIVAT | AUKTION | HAENDLER | INZAHLUNGNAHME | IMPORT
+  currentOwner  String    @default("MOTORHOF_OG") // MRIYA_MOTORS | A_MOTORS | AUTOHUB | MOTORHOF_OG (§9)
+
+  // Финансовые поля (§11, §12, §13). Backfill существующих: einkauf24 = purchasePrice.
+  einkaufspreisGemaess24 Decimal? @db.Decimal(12, 2)
+  plannedSalePriceGross  Decimal? @db.Decimal(12, 2)
+  minimumSalePriceGross  Decimal? @db.Decimal(12, 2)
+  arrivalDate            DateTime?
+
   expenses      Expense[]
   deals         Deal[]
   tasks         Task[]
@@ -31,7 +44,13 @@ model Car {
 model Expense {
   id     String   @id @default(cuid())
   title  String
-  amount Int
+  // Колонка в БД остаётся "amount" (@map) — переименования нет, данные сохранены.
+  amountGross Decimal @db.Decimal(12, 2) @map("amount")
+  amountNet   Decimal? @db.Decimal(12, 2)
+  vatRate     Int      @default(20)
+  deductibleInputVatAmount Decimal? @db.Decimal(12, 2)
+  // Уже входит в полную стоимость приобретения — не вычитать второй раз (§12.1).
+  alreadyIncludedInAcquisitionCost Boolean @default(false)
   date   DateTime @default(now())
   car    Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
   carId  String
@@ -54,7 +73,7 @@ model Deal {
   id        String    @id @default(cuid())
   type      String    @default("SALE") // SALE | PURCHASE | TRADE_IN
   stage     String    @default("NEW") // NEW | CONTACT | TEST_DRIVE | NEGOTIATION | CONTRACT | DONE | LOST
-  amount    Int?
+  amount    Decimal?  @db.Decimal(12, 2)
   notes     String?
   createdAt DateTime  @default(now())
   closedAt  DateTime?

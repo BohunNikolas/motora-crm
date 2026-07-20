@@ -6,13 +6,15 @@ import { addExpense, deleteExpense, deleteCar, setCarStatus } from "@/lib/action
 import {
   fmtMoney,
   fmtDate,
+  sumMoney,
   carCost,
-  carMargin,
+  carPlannedFinance,
   markupPct,
   CAR_STATUS,
   CAR_STATUS_ORDER,
   STAGE_LABEL,
   DEAL_TYPE,
+  TAX_SCHEME,
 } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -30,9 +32,10 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
 
   if (!car) notFound();
 
-  const expensesTotal = car.expenses.reduce((s, e) => s + e.amount, 0);
+  const expensesTotal = sumMoney(car.expenses.map((e) => e.amountGross));
   const cost = carCost(car);
-  const margin = carMargin(car);
+  const fin = carPlannedFinance(car);
+  const margin = fin.finalMargin;
   const markup = markupPct(car);
 
   const specs: [string, string][] = [
@@ -118,7 +121,7 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
                       <div className="text-[12px] text-muted">{fmtDate(e.date)}</div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="mono text-[14px]">{fmtMoney(e.amount)}</span>
+                      <span className="mono text-[14px]">{fmtMoney(e.amountGross)}</span>
                       <form action={deleteExpense.bind(null, e.id, car.id)}>
                         <button
                           type="submit"
@@ -195,6 +198,16 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
         <div className="flex flex-col gap-4">
           <section className="panel animate-in delay-2 p-5">
             <h2 className="mb-4 text-[15px] font-bold">Экономика</h2>
+            <div className="mb-3 flex items-center justify-between text-[13px]">
+              <span className="text-muted">Налоговый режим</span>
+              <span className={fin.isConfirmed ? "" : "text-red"}>{TAX_SCHEME[car.taxScheme] ?? car.taxScheme}</span>
+            </div>
+            {!fin.isConfirmed && (
+              <div className="mb-3 rounded-lg border border-[rgba(248,113,113,0.3)] bg-[var(--red-dim)] px-3 py-2 text-[12px] text-red">
+                Налоговый режим не определён — расчёт USt и маржа предварительные и не входят
+                в подтверждённые итоги.
+              </div>
+            )}
             <div className="flex flex-col gap-2.5 text-[14px]">
               <div className="flex justify-between">
                 <span className="text-muted">Закупка</span>
@@ -202,15 +215,21 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Расходы</span>
-                <span className="mono">{expensesTotal ? `+ ${fmtMoney(expensesTotal)}` : "—"}</span>
+                <span className="mono">{expensesTotal.gt(0) ? `+ ${fmtMoney(expensesTotal)}` : "—"}</span>
               </div>
               <div className="flex justify-between border-t border-line pt-2.5 font-bold">
                 <span>Себестоимость</span>
                 <span className="mono">{fmtMoney(cost)}</span>
               </div>
               <div className="mt-1 flex justify-between">
-                <span className="text-muted">Цена продажи</span>
-                <span className="mono">{fmtMoney(car.listPrice)}</span>
+                <span className="text-muted">Цена продажи (план)</span>
+                <span className="mono">{fmtMoney(car.plannedSalePriceGross ?? car.listPrice)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">
+                  {car.taxScheme === "REGELBESTEUERUNG" ? "Ausgangs-USt" : "Differenz-USt"}
+                </span>
+                <span className="mono">− {fmtMoney(fin.vatAmount)}</span>
               </div>
             </div>
 
@@ -218,7 +237,7 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
               <div className="label mb-1">
                 {car.status === "SOLD" ? "Маржа (плановая)" : "Ожидаемая маржа"}
               </div>
-              <div className={`mono text-[26px] font-bold leading-none ${margin >= 0 ? "text-green" : "text-red"}`}>
+              <div className={`mono text-[26px] font-bold leading-none ${margin.gte(0) ? "text-green" : "text-red"}`}>
                 {fmtMoney(margin)}
               </div>
               <div className="mt-1.5 text-[13px] text-muted">наценка {markup}% к себестоимости</div>

@@ -112,7 +112,7 @@
 ## Прогресс
 
 - [x] **Фаза 0** (20.07): MOTORA→MOTORHOF (сайдбар, title, metadata), монограмма-логотип на warm-white плитке + favicon `app/icon.svg`, палитра янтарь→warm-white/графит (убраны декоративные подсветки и градиент воронки), `fmtMoney`→EUR de-AT `€ 12.500,00`, `fmtDate`→DD.MM.YYYY Europe/Vienna, убран «MVP v0.1», `$`→`€` в плейсхолдере и seed-заметках. Прод пересеян (данные тестовые). Проверено на всех 5 экранах: ни одного `$`, янтаря нет, статусные цвета сохранены. tsc/lint/build чисто. CLAUDE.md обновлён под новый бренд/локаль
-- [ ] Фаза 1
+- [x] **Фаза 1** (20.07): `src/lib/finance.ts` — Differenzbesteuerung/Regelbesteuerung/план-факт на Decimal, half-up; 12 юнит-тестов (`finance.test.ts`, vitest) — все кейсы §24.1 зелёные. Переход на `prisma migrate` (baseline `0_init` + `phase1_finance`). Деньги Int→`Decimal(12,2)` во всех моделях (данные сохранены через `@map` и `SET DATA TYPE`). Новые поля Car (taxScheme, purchaseChannel, currentOwner, einkaufspreisGemaess24, plannedSalePriceGross, minimumSalePriceGross, arrivalDate) + Expense (amountGross, amountNet, vatRate, deductibleInputVatAmount, alreadyIncludedInAcquisitionCost). Backfill: einkauf24=закупка, план=цена. Форма авто расширена, UNGEKLAERT-предупреждение в карточке. Приёмка: дашборд маржа €4.616,67 = независимый ручной пересчёт по новым формулам (была €5.700 без налога); суммы существующих авто целы; путь записи Decimal проверен. tsc/lint/test/build чисто.
 - [ ] Фаза 2
 - [ ] Фаза 3
 - [ ] Фаза 4

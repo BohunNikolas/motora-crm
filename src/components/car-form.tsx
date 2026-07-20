@@ -1,6 +1,19 @@
 import Link from "next/link";
-import type { Car } from "@prisma/client";
-import { CAR_STATUS, CAR_STATUS_ORDER, TRANSMISSIONS, FUELS } from "@/lib/format";
+import type { Car, Prisma } from "@prisma/client";
+import {
+  CAR_STATUS,
+  CAR_STATUS_ORDER,
+  TRANSMISSIONS,
+  FUELS,
+  TAX_SCHEME,
+  TAX_SCHEME_ORDER,
+  PURCHASE_CHANNEL,
+  CURRENT_OWNER,
+} from "@/lib/format";
+
+// Decimal → строка для value поля; Date → YYYY-MM-DD для input[type=date].
+const m = (d?: Prisma.Decimal | null) => (d == null ? "" : d.toString());
+const dstr = (d?: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
 
 export function CarForm({
   car,
@@ -94,30 +107,83 @@ export function CarForm({
         </p>
         <div className="grid grid-cols-4 gap-4">
           <div>
-            <label className="label" htmlFor="purchasePrice">Закупочная цена *</label>
+            <label className="label" htmlFor="purchasePrice">Закупочная цена * €</label>
             <input
               id="purchasePrice"
               name="purchasePrice"
               type="number"
+              step="0.01"
               required
               min={0}
-              defaultValue={car?.purchasePrice}
+              defaultValue={m(car?.purchasePrice)}
               className="field mono"
               placeholder="12000"
             />
           </div>
           <div>
-            <label className="label" htmlFor="listPrice">Цена продажи *</label>
+            <label className="label" htmlFor="listPrice">Цена продажи * €</label>
             <input
               id="listPrice"
               name="listPrice"
               type="number"
+              step="0.01"
               required
               min={0}
-              defaultValue={car?.listPrice}
+              defaultValue={m(car?.listPrice)}
               className="field mono"
               placeholder="15500"
             />
+          </div>
+        </div>
+      </section>
+
+      <section className="panel p-5">
+        <h2 className="mb-1 text-[15px] font-bold">Налоги и закупка</h2>
+        <p className="mb-4 text-[13px] text-muted">
+          Если не заполнить: Einkaufspreis §24 = закупочной цене, плановая цена = цене продажи.
+          Условные поля по каналам появятся в следующем обновлении.
+        </p>
+        <div className="grid grid-cols-4 gap-4">
+          <div>
+            <label className="label" htmlFor="taxScheme">Налоговый режим</label>
+            <select id="taxScheme" name="taxScheme" defaultValue={car?.taxScheme ?? "DIFFERENZBESTEUERUNG"} className="field">
+              {TAX_SCHEME_ORDER.map((k) => (
+                <option key={k} value={k}>{TAX_SCHEME[k]}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label" htmlFor="purchaseChannel">Канал закупки</label>
+            <select id="purchaseChannel" name="purchaseChannel" defaultValue={car?.purchaseChannel ?? ""} className="field">
+              <option value="">—</option>
+              {Object.entries(PURCHASE_CHANNEL).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label" htmlFor="currentOwner">Владелец</label>
+            <select id="currentOwner" name="currentOwner" defaultValue={car?.currentOwner ?? "MOTORHOF_OG"} className="field">
+              {Object.entries(CURRENT_OWNER).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label" htmlFor="arrivalDate">Дата поступления</label>
+            <input id="arrivalDate" name="arrivalDate" type="date" defaultValue={dstr(car?.arrivalDate)} className="field" />
+          </div>
+          <div>
+            <label className="label" htmlFor="einkaufspreisGemaess24">Einkaufspreis §24 €</label>
+            <input id="einkaufspreisGemaess24" name="einkaufspreisGemaess24" type="number" step="0.01" min={0} defaultValue={m(car?.einkaufspreisGemaess24)} className="field mono" placeholder="= закупке" />
+          </div>
+          <div>
+            <label className="label" htmlFor="plannedSalePriceGross">Плановая цена €</label>
+            <input id="plannedSalePriceGross" name="plannedSalePriceGross" type="number" step="0.01" min={0} defaultValue={m(car?.plannedSalePriceGross)} className="field mono" placeholder="= цене продажи" />
+          </div>
+          <div>
+            <label className="label" htmlFor="minimumSalePriceGross">Мин. цена €</label>
+            <input id="minimumSalePriceGross" name="minimumSalePriceGross" type="number" step="0.01" min={0} defaultValue={m(car?.minimumSalePriceGross)} className="field mono" placeholder="—" />
           </div>
         </div>
       </section>

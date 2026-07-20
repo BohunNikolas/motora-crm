@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Cell } from "@/components/cell-link";
-import { fmtMoney, carCost, carMargin, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
+import { fmtMoney, sumMoney, carCost, carMargin, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -33,8 +33,8 @@ export default async function CarsPage({
   const total = counts.reduce((s, c) => s + c._count, 0);
   const filtered = Boolean(status) || Boolean(needle);
 
-  const totalCost = cars.reduce((s, c) => s + carCost(c), 0);
-  const totalMargin = cars.reduce((s, c) => s + carMargin(c), 0);
+  const totalCost = sumMoney(cars.map((c) => carCost(c)));
+  const totalMargin = sumMoney(cars.map((c) => carMargin(c)));
 
   const linkFor = (s?: string) => {
     const p = new URLSearchParams();
@@ -126,7 +126,7 @@ export default async function CarsPage({
               </thead>
               <tbody>
                 {cars.map((c) => {
-                  const expenses = c.expenses.reduce((s, e) => s + e.amount, 0);
+                  const expenses = sumMoney(c.expenses.map((e) => e.amountGross));
                   const margin = carMargin(c);
                   const href = `/cars/${c.id}`;
                   return (
@@ -146,7 +146,7 @@ export default async function CarsPage({
                         {fmtMoney(c.purchasePrice)}
                       </Cell>
                       <Cell href={href} className="mono text-right text-muted">
-                        {expenses ? fmtMoney(expenses) : "—"}
+                        {expenses.gt(0) ? fmtMoney(expenses) : "—"}
                       </Cell>
                       <Cell href={href} className="mono text-right">
                         {fmtMoney(carCost(c))}
@@ -156,7 +156,7 @@ export default async function CarsPage({
                       </Cell>
                       <Cell
                         href={href}
-                        className={`mono text-right font-bold ${margin >= 0 ? "text-green" : "text-red"}`}
+                        className={`mono text-right font-bold ${margin.gte(0) ? "text-green" : "text-red"}`}
                       >
                         {fmtMoney(margin)}
                       </Cell>

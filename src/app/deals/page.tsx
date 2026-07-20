@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
 import { createDeal, moveDealStage, loseDeal, reopenDeal, deleteDeal } from "@/lib/actions";
-import { fmtMoney, fmtDate, dealMargin, DEAL_STAGES, DEAL_TYPE, CLIENT_TYPE } from "@/lib/format";
+import { fmtMoney, fmtDate, sumMoney, dealMargin, DEAL_STAGES, DEAL_TYPE, CLIENT_TYPE } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +45,7 @@ function DealCard({ deal, isLast }: { deal: DealFull; isLast: boolean }) {
       </div>
 
       {margin != null && (
-        <div className={`mt-1.5 mono text-[12px] font-bold ${margin >= 0 ? "text-green" : "text-red"}`}>
+        <div className={`mt-1.5 mono text-[12px] font-bold ${margin.gte(0) ? "text-green" : "text-red"}`}>
           маржа {fmtMoney(margin)}
         </div>
       )}
@@ -114,7 +114,7 @@ export default async function DealsPage() {
 
   const lost = deals.filter((d) => d.stage === "LOST");
   const active = deals.filter((d) => !["DONE", "LOST"].includes(d.stage));
-  const pipelineValue = active.reduce((s, d) => s + (d.amount ?? 0), 0);
+  const pipelineValue = sumMoney(active.map((d) => d.amount));
   const lastStage = DEAL_STAGES[DEAL_STAGES.length - 1].key;
 
   return (
@@ -202,7 +202,7 @@ export default async function DealsPage() {
           <div className="flex min-w-max gap-3">
             {DEAL_STAGES.map((stage) => {
               const items = deals.filter((d) => d.stage === stage.key);
-              const sum = items.reduce((s, d) => s + (d.amount ?? 0), 0);
+              const sum = sumMoney(items.map((d) => d.amount));
               return (
                 <section key={stage.key} className="flex w-[212px] shrink-0 flex-col">
                   <div className="mb-2.5 flex items-baseline justify-between px-1">
@@ -210,7 +210,7 @@ export default async function DealsPage() {
                       {stage.label}
                       <span className="mono ml-1.5 text-muted">{items.length}</span>
                     </h2>
-                    {sum > 0 && <span className="mono text-[11px] text-muted">{fmtMoney(sum)}</span>}
+                    {sum.gt(0) && <span className="mono text-[11px] text-muted">{fmtMoney(sum)}</span>}
                   </div>
                   <div className="flex min-h-[80px] flex-col gap-2 rounded-xl border border-dashed border-line p-2">
                     {items.map((d) => (

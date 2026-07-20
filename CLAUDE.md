@@ -27,7 +27,9 @@ Next.js 16 + TypeScript + Tailwind v4 + Prisma 6 + SQLite. Без сторонн
 - На всех страницах с данными: `export const dynamic = "force-dynamic"`.
 - Хелперы форматирования и словари статусов — в `src/lib/format.ts`. Все подписи статусов/этапов брать ТОЛЬКО оттуда, не хардкодить в компонентах.
 - Prisma-клиент — только через синглтон `src/lib/prisma.ts`.
-- Деньги хранятся в **целых евро** (Int, пока; переход на Decimal(12,2) — фаза 1 ТЗ MOTORHOF), форматируются `fmtMoney` → `€ 12.500,00` (de-AT).
+- Деньги — **Prisma `Decimal` / Postgres `NUMERIC(12,2)`**, читаются как `Prisma.Decimal`. НИКАКОГО JS-float для денег. Сравнения — `.gte(0)`/`.gt(0)`, суммирование — хелпер `sumMoney` из `format.ts`. Форматирование — `fmtMoney` (принимает Decimal|number) → `€ 12.500,00`.
+- **Вся денежная арифметика — только в `src/lib/finance.ts`** (австрийские налоги: Differenzbesteuerung `USt = max(0, продажа−einkauf24)×20/120`, Regelbesteuerung, план/факт). Округление half-up до цента. В компонентах арифметики денег быть НЕ должно. Формулы покрыты `finance.test.ts` (vitest, кейсы §24.1). `format.ts` (carCost/carMargin/dealMargin/carPlannedFinance) — тонкие адаптеры Prisma→finance.
+- **Миграции — только `prisma migrate`** (НЕ `db push`). Рабочий процесс на хостинге без shadow-базы: снять копию старой схемы → `migrate diff --from-schema-datamodel old --to-schema-datamodel new --script` → руками добавить backfill → `migrate deploy`. `_prisma_migrations` уже инициализирована, baseline `0_init` помечен applied. Прод и локаль — одна база, поэтому `migrate deploy` из локали обновляет и прод.
 - Статусы и этапы — строковые enum-ы (наследие SQLite; менять на native enum сейчас незачем): значения см. в `format.ts` (CAR_STATUS, DEAL_STAGES, CLIENT_TYPE, DEAL_TYPE). Новые значения добавлять синхронно в схему-логику-словари.
 - Себестоимость авто = `purchasePrice + sum(expenses)`. Маржа = `deal.amount − себестоимость`. Эта логика должна считаться одинаково везде (дашборд, карточка авто, сделки) — при изменении выноси в общий хелпер.
 
@@ -44,7 +46,7 @@ Next.js 16 + TypeScript + Tailwind v4 + Prisma 6 + SQLite. Без сторонн
 
 ```bash
 export PATH="$HOME/.local/node/bin:$PATH"
-npx tsc --noEmit && npm run lint && npm run build
+npx tsc --noEmit && npm run lint && npm test && npm run build
 ```
 
 Плюс ручная проверка затронутого сценария в браузере (dev-сервер: `npm run dev`, порт 3000).

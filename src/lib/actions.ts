@@ -13,53 +13,64 @@ const num = (fd: FormData, key: string) => {
   return Number.isNaN(n) ? null : n;
 };
 
+// Деньги парсим в СТРОКУ для Prisma Decimal (без JS-float): «€ 12.500,50» → "12500.50".
+// Принимаем и точку, и запятую как десятичный разделитель.
+const money = (fd: FormData, key: string): string | null => {
+  const v = str(fd, key);
+  if (!v) return null;
+  const cleaned = v.replace(/[€\s]/g, "").replace(",", ".").replace(/[^\d.-]/g, "");
+  return cleaned === "" || cleaned === "-" ? null : cleaned;
+};
+
+const date = (fd: FormData, key: string): Date | null => {
+  const v = str(fd, key);
+  return v ? new Date(`${v}T00:00:00`) : null;
+};
+
 function revalidateAll() {
   for (const p of ["/", "/cars", "/clients", "/deals", "/tasks"]) revalidatePath(p);
 }
 
 // ─── Автомобили ────────────────────────────────────────────────
 
+// Общая сборка данных авто из формы. Деньги — строки для Decimal.
+// einkaufspreis24 по умолчанию = закупка, плановая цена = цена продажи (§22).
+function carDataFromForm(fd: FormData) {
+  const purchasePrice = money(fd, "purchasePrice") ?? "0";
+  const listPrice = money(fd, "listPrice") ?? "0";
+  const engine = str(fd, "engineVol");
+  return {
+    make: str(fd, "make") ?? "—",
+    model: str(fd, "model") ?? "—",
+    year: num(fd, "year") ?? new Date().getFullYear(),
+    mileage: num(fd, "mileage") ?? 0,
+    vin: str(fd, "vin"),
+    color: str(fd, "color"),
+    transmission: str(fd, "transmission"),
+    fuel: str(fd, "fuel"),
+    engineVol: engine ? parseFloat(engine.replace(",", ".")) : null,
+    purchasePrice,
+    listPrice,
+    status: str(fd, "status") ?? "PREP",
+    notes: str(fd, "notes"),
+    taxScheme: str(fd, "taxScheme") ?? "DIFFERENZBESTEUERUNG",
+    purchaseChannel: str(fd, "purchaseChannel"),
+    currentOwner: str(fd, "currentOwner") ?? "MOTORHOF_OG",
+    einkaufspreisGemaess24: money(fd, "einkaufspreisGemaess24") ?? purchasePrice,
+    plannedSalePriceGross: money(fd, "plannedSalePriceGross") ?? listPrice,
+    minimumSalePriceGross: money(fd, "minimumSalePriceGross"),
+    arrivalDate: date(fd, "arrivalDate"),
+  };
+}
+
 export async function createCar(fd: FormData) {
-  const car = await prisma.car.create({
-    data: {
-      make: str(fd, "make") ?? "—",
-      model: str(fd, "model") ?? "—",
-      year: num(fd, "year") ?? new Date().getFullYear(),
-      mileage: num(fd, "mileage") ?? 0,
-      vin: str(fd, "vin"),
-      color: str(fd, "color"),
-      transmission: str(fd, "transmission"),
-      fuel: str(fd, "fuel"),
-      engineVol: str(fd, "engineVol") ? parseFloat(str(fd, "engineVol")!.replace(",", ".")) : null,
-      purchasePrice: num(fd, "purchasePrice") ?? 0,
-      listPrice: num(fd, "listPrice") ?? 0,
-      status: str(fd, "status") ?? "PREP",
-      notes: str(fd, "notes"),
-    },
-  });
+  const car = await prisma.car.create({ data: carDataFromForm(fd) });
   revalidateAll();
   redirect(`/cars/${car.id}`);
 }
 
 export async function updateCar(id: string, fd: FormData) {
-  await prisma.car.update({
-    where: { id },
-    data: {
-      make: str(fd, "make") ?? "—",
-      model: str(fd, "model") ?? "—",
-      year: num(fd, "year") ?? new Date().getFullYear(),
-      mileage: num(fd, "mileage") ?? 0,
-      vin: str(fd, "vin"),
-      color: str(fd, "color"),
-      transmission: str(fd, "transmission"),
-      fuel: str(fd, "fuel"),
-      engineVol: str(fd, "engineVol") ? parseFloat(str(fd, "engineVol")!.replace(",", ".")) : null,
-      purchasePrice: num(fd, "purchasePrice") ?? 0,
-      listPrice: num(fd, "listPrice") ?? 0,
-      status: str(fd, "status") ?? "PREP",
-      notes: str(fd, "notes"),
-    },
-  });
+  await prisma.car.update({ where: { id }, data: carDataFromForm(fd) });
   revalidateAll();
   redirect(`/cars/${id}`);
 }
@@ -77,7 +88,12 @@ export async function deleteCar(id: string) {
 
 export async function addExpense(carId: string, fd: FormData) {
   await prisma.expense.create({
-    data: { carId, title: str(fd, "title") ?? "Расход", amount: num(fd, "amount") ?? 0 },
+    data: {
+      carId,
+      title: str(fd, "title") ?? "Расход",
+      amountGross: money(fd, "amount") ?? "0",
+      // vatRate=20, alreadyIncluded=false — по умолчанию из схемы. Полная форма расхода — фаза 4.
+    },
   });
   revalidatePath(`/cars/${carId}`);
   revalidatePath("/cars");
@@ -139,7 +155,7 @@ export async function createDeal(fd: FormData) {
       clientId,
       carId: str(fd, "carId"),
       type: str(fd, "type") ?? "SALE",
-      amount: num(fd, "amount"),
+      amount: money(fd, "amount"),
       notes: str(fd, "notes"),
       stage: "NEW",
     },
