@@ -273,6 +273,57 @@ export const BODY_PART_LABEL: Record<string, string> = Object.fromEntries(
   BODY_PARTS.map((p) => [p.key, p.label])
 );
 
+// ─── Документы авто (§8.5) ──────────────────────────────────────
+
+// financial: true → закупочный/внутренний документ, НЕ виден SALES/TECHNICAL (redaction).
+export const DOC_TYPES: { key: string; label: string; financial: boolean }[] = [
+  { key: "KAUFVERTRAG", label: "Kaufvertrag", financial: false },
+  { key: "ANKAUFSRECHNUNG", label: "Ankaufsrechnung (закупочный счёт)", financial: true },
+  { key: "ZULASSUNG", label: "Zulassungsschein", financial: false },
+  { key: "GUTACHTEN_57A", label: "§57a-Gutachten", financial: false },
+  { key: "AUKTIONSRECHNUNG", label: "Auktionsrechnung", financial: true },
+  { key: "RECHNUNG_EU_OG", label: "Rechnung e.U. → OG", financial: true },
+  { key: "UEBERGABE", label: "Документы выдачи", financial: false },
+  { key: "SONSTIGES", label: "Прочее", financial: false },
+];
+export const DOC_TYPE_LABEL: Record<string, string> = Object.fromEntries(
+  DOC_TYPES.map((d) => [d.key, d.label])
+);
+export const isFinancialDoc = (docType: string | null) =>
+  DOC_TYPES.find((d) => d.key === docType)?.financial ?? false;
+
+type CarForDocs = {
+  purchaseChannel: string | null;
+  pickerlVorhanden: string;
+  currentOwner: string;
+};
+
+/**
+ * Обязательные документы для авто (§8.5), с учётом канала/Pickerl/владельца.
+ * Каждый пункт удовлетворяется любым из docTypes. `present` — есть ли такой
+ * документ среди загруженных. Конфигурируемость (админ меняет обязательность) —
+ * фаза 5 (Настройки); здесь — дефолтный набор.
+ */
+export function requiredDocs(car: CarForDocs, presentTypes: Set<string>) {
+  const reqs: { label: string; satisfiedBy: string[] }[] = [
+    { label: "Kaufvertrag / Ankaufsrechnung", satisfiedBy: ["KAUFVERTRAG", "ANKAUFSRECHNUNG"] },
+    { label: "Zulassungsschein", satisfiedBy: ["ZULASSUNG"] },
+  ];
+  if (car.purchaseChannel === "AUKTION") {
+    reqs.push({ label: "Auktionsrechnung", satisfiedBy: ["AUKTIONSRECHNUNG"] });
+  }
+  if (car.pickerlVorhanden === "JA") {
+    reqs.push({ label: "§57a-Gutachten", satisfiedBy: ["GUTACHTEN_57A"] });
+  }
+  if (["MRIYA_MOTORS", "A_MOTORS", "AUTOHUB"].includes(car.currentOwner)) {
+    reqs.push({ label: "Rechnung e.U. → OG", satisfiedBy: ["RECHNUNG_EU_OG"] });
+  }
+  return reqs.map((r) => ({
+    label: r.label,
+    present: r.satisfiedBy.some((t) => presentTypes.has(t)),
+  }));
+}
+
 /**
  * «Pickerl требует внимания» (§8.4): нет Pickerl, срок уже наступил, либо
  * Begutachtungsmonat в текущем или следующем календарном месяце.

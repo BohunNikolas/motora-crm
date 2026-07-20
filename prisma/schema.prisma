@@ -69,6 +69,25 @@ model Car {
   expenses      Expense[]
   deals         Deal[]
   tasks         Task[]
+  files         CarFile[]
+}
+
+// Фото и документы авто (§8.5). Хранятся в R2 (ключ `key`), отдаются
+// через /api/files/[id] с проверкой прав.
+model CarFile {
+  id          String   @id @default(cuid())
+  car         Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+  carId       String
+  kind        String   // PHOTO | DOCUMENT
+  docType     String?  // для DOCUMENT: KAUFVERTRAG | ZULASSUNG | GUTACHTEN_57A | AUKTIONSRECHNUNG | RECHNUNG_EU_OG | ANKAUFSRECHNUNG | UEBERGABE | SONSTIGES
+  key         String   // ключ объекта в хранилище
+  filename    String
+  contentType String
+  size        Int
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+
+  @@index([carId])
 }
 
 // История перемещений по парковке (§7): кто, когда, откуда и куда.

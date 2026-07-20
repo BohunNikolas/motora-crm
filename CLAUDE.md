@@ -18,6 +18,7 @@
 - **Авторизация: капабилити-матрица `src/lib/authz.ts`** (спецификация: `docs/roles-motorhof.md`). Роли ADMIN/PARTNER/SALES/TECHNICAL/READ_ONLY, мульти-роль = union. В Server Actions — `requireCan(...)`; в страницах — `viewerFlags(user)`/`can(user, cap)` и УСЛОВНЫЙ РЕНДЕР запрещённых блоков (redaction: цифр нет в HTML, не «спрятано CSS»). НИКОГДА не проверять `if (role === ...)` по коду.
 - **AuditLog** (`audit()` в auth.ts) — писать при каждой мутации Car/Expense/Deal/Client/Task с before/after; для override — reason.
 - **Kostenvoranschlag:** `Expense.approvalStatus` PENDING/APPROVED; финансовые хелперы (`format.ts`) считают ТОЛЬКО APPROVED.
+- **Файлы (§8.5):** модель `CarFile` (PHOTO|DOCUMENT), хранилище — S3-совместимое (`src/lib/storage.ts`, сейчас Cloudflare R2), переменные `S3_*`. Браузер НИКОГДА не ходит в R2 напрямую (блокировка домена R2 у провайдера + приватный бакет) — только через `/api/files/[id]` (auth + redaction финансовых документов). Загрузка через Server Action (лимит тела поднят в next.config до 15mb). **Локально до R2 не достучаться — загрузку проверять на проде.** На Vercel должны быть заданы те же `S3_*`.
 
 ## Стек
 

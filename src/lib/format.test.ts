@@ -6,6 +6,8 @@ import {
   isActiveStatus,
   ACTIVE_STATUSES,
   pickerlNeedsAttention,
+  requiredDocs,
+  isFinancialDoc,
 } from "./format";
 
 const NOW = new Date("2026-07-15T12:00:00"); // июль 2026
@@ -38,6 +40,45 @@ describe("Pickerl требует внимания (§24.2)", () => {
   it("срок дальше одного месяца → НЕ требует внимания", () => {
     expect(pickerlNeedsAttention(pk("JA", 9, 2026), NOW)).toBe(false);
     expect(pickerlNeedsAttention(pk("JA", 3, 2027), NOW)).toBe(false);
+  });
+});
+
+describe("Обязательные документы (§8.5)", () => {
+  const car = (over = {}) => ({
+    purchaseChannel: null as string | null,
+    pickerlVorhanden: "NEIN",
+    currentOwner: "MOTORHOF_OG",
+    ...over,
+  });
+
+  it("базовый набор: Kaufvertrag/Ankaufsrechnung + Zulassung", () => {
+    const reqs = requiredDocs(car(), new Set());
+    expect(reqs.map((r) => r.label)).toEqual(["Kaufvertrag / Ankaufsrechnung", "Zulassungsschein"]);
+    expect(reqs.every((r) => !r.present)).toBe(true);
+  });
+
+  it("Auktion добавляет Auktionsrechnung", () => {
+    const reqs = requiredDocs(car({ purchaseChannel: "AUKTION" }), new Set());
+    expect(reqs.some((r) => r.label === "Auktionsrechnung")).toBe(true);
+  });
+
+  it("Pickerl=Ja добавляет §57a-Gutachten; партнёрский владелец — Rechnung e.U.→OG", () => {
+    const reqs = requiredDocs(car({ pickerlVorhanden: "JA", currentOwner: "AUTOHUB" }), new Set());
+    expect(reqs.some((r) => r.label === "§57a-Gutachten")).toBe(true);
+    expect(reqs.some((r) => r.label === "Rechnung e.U. → OG")).toBe(true);
+  });
+
+  it("требование удовлетворяется любым из типов (Ankaufsrechnung засчитывает Kaufvertrag-пункт)", () => {
+    const reqs = requiredDocs(car(), new Set(["ANKAUFSRECHNUNG", "ZULASSUNG"]));
+    expect(reqs.every((r) => r.present)).toBe(true);
+  });
+
+  it("financial-флаг: закупочные документы помечены как финансовые", () => {
+    expect(isFinancialDoc("AUKTIONSRECHNUNG")).toBe(true);
+    expect(isFinancialDoc("RECHNUNG_EU_OG")).toBe(true);
+    expect(isFinancialDoc("ANKAUFSRECHNUNG")).toBe(true);
+    expect(isFinancialDoc("KAUFVERTRAG")).toBe(false);
+    expect(isFinancialDoc("ZULASSUNG")).toBe(false);
   });
 });
 

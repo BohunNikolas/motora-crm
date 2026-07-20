@@ -1,8 +1,10 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "./prisma";
+import { putObject, deleteObject } from "./storage";
 import {
   DEAL_STAGES,
   CAR_STATUS_ORDER,
@@ -189,6 +191,72 @@ export async function updateCar(id: string, fd: FormData) {
   });
   revalidateAll();
   redirect(`/cars/${id}${await pickerlAskSuffix(id, data)}`);
+}
+
+// ─── Фото и документы (§8.5) ───────────────────────────────────
+
+const ALLOWED_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "application/pdf": "pdf",
+};
+const MAX_FILE_BYTES = 12 * 1024 * 1024; // 12 МБ
+
+/**
+ * Загрузка файла авто через сервер (браузер → сервер → R2). kind = PHOTO | DOCUMENT.
+ * Фото — SALES/TECHNICAL/ADMIN/PARTNER; документы — ADMIN/PARTNER/SALES.
+ */
+export async function uploadCarFile(carId: string, kind: string, fd: FormData) {
+  const user =
+    kind === "PHOTO"
+      ? await requireCan("edit.carDescription", "edit.tech")
+      : await requireCan("edit.car", "sell");
+
+  const file = fd.get("file");
+  if (!(file instanceof File) || file.size === 0) redirect(`/cars/${carId}?ferror=nofile`);
+  const f = file as File;
+  const ext = ALLOWED_TYPES[f.type];
+  if (!ext) redirect(`/cars/${carId}?ferror=filetype`);
+  if (f.size > MAX_FILE_BYTES) redirect(`/cars/${carId}?ferror=filesize`);
+
+  const docType = kind === "DOCUMENT" ? str(fd, "docType") ?? "SONSTIGES" : null;
+  const key = `cars/${carId}/${kind.toLowerCase()}/${randomUUID()}.${ext}`;
+  const buf = Buffer.from(await f.arrayBuffer());
+  await putObject(key, buf, f.type);
+
+  const rec = await prisma.carFile.create({
+    data: {
+      carId,
+      kind,
+      docType,
+      key,
+      filename: f.name.slice(0, 200),
+      contentType: f.type,
+      size: f.size,
+      uploadedBy: user.id,
+    },
+  });
+  await audit(user.id, "CarFile", rec.id, "upload", { after: { carId, kind, docType, filename: rec.filename } });
+  revalidatePath(`/cars/${carId}`);
+  revalidatePath("/cars");
+}
+
+/** Удаление файла — ADMIN/PARTNER (edit.car). Убирает и объект из хранилища. */
+export async function deleteCarFile(id: string, carId: string) {
+  const user = await requireCan("edit.car");
+  const rec = await prisma.carFile.findUnique({ where: { id } });
+  if (!rec) return;
+  try {
+    await deleteObject(rec.key);
+  } catch {
+    // объект мог не создаться/уже удалён — запись всё равно чистим
+  }
+  await prisma.carFile.delete({ where: { id } });
+  await audit(user.id, "CarFile", id, "delete", { before: { filename: rec.filename, kind: rec.kind } });
+  revalidatePath(`/cars/${carId}`);
+  revalidatePath("/cars");
 }
 
 /** Создать автозадачу Pickerl (§8.4). Без дублей: одна незакрытая на авто. */

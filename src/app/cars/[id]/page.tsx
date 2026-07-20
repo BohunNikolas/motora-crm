@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
-import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus, assignParking, createPickerlTask } from "@/lib/actions";
+import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus, assignParking, createPickerlTask, uploadCarFile, deleteCarFile } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
+import { storageConfigured } from "@/lib/storage";
 import {
   fmtMoney,
   fmtDate,
@@ -15,6 +16,10 @@ import {
   mhCode,
   internalCode,
   pickerlNeedsAttention,
+  requiredDocs,
+  isFinancialDoc,
+  DOC_TYPES,
+  DOC_TYPE_LABEL,
   CAR_STATUS,
   CAR_STATUS_ORDER,
   SALES_STATUS_SET,
@@ -34,10 +39,10 @@ export default async function CarPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ perror?: string; pickerl?: string }>;
+  searchParams: Promise<{ perror?: string; pickerl?: string; ferror?: string }>;
 }) {
   const { id } = await params;
-  const { perror, pickerl } = await searchParams;
+  const { perror, pickerl, ferror } = await searchParams;
   const user = await requireUser();
 
   // Redaction (roles-motorhof.md): запрещённые блоки НЕ рендерятся на сервере —
@@ -53,10 +58,26 @@ export default async function CarPage({
       expenses: { orderBy: { date: "desc" } },
       deals: { include: { client: true }, orderBy: { createdAt: "desc" } },
       parkingMoves: { orderBy: { movedAt: "desc" }, take: 6 },
+      files: { orderBy: { createdAt: "asc" } },
     },
   });
 
   if (!car) notFound();
+
+  // Файлы (§8.5). Финансовые документы прячем от SALES/TECHNICAL.
+  const seeFinDocs = can(user, "see.acquisition");
+  const photos = car.files.filter((f) => f.kind === "PHOTO");
+  const documents = car.files.filter(
+    (f) => f.kind === "DOCUMENT" && (seeFinDocs || !isFinancialDoc(f.docType))
+  );
+  const presentDocTypes = new Set(
+    car.files.filter((f) => f.kind === "DOCUMENT" && f.docType).map((f) => f.docType as string)
+  );
+  const docChecklist = requiredDocs(car, presentDocTypes);
+  const canUploadPhoto = can(user, "edit.carDescription") || can(user, "edit.tech");
+  const canUploadDoc = can(user, "edit.car") || can(user, "sell");
+  const canDeleteFile = can(user, "edit.car");
+  const storageOk = storageConfigured();
 
   const canPark = can(user, "edit.car") || can(user, "status.sales") || can(user, "status.tech");
   const PARK_ERRORS: Record<string, string> = {
@@ -123,6 +144,16 @@ export default async function CarPage({
           </div>
         </div>
       </header>
+
+      {ferror && (
+        <div className="animate-in mb-4 rounded-xl border border-[rgba(248,113,113,0.3)] bg-[var(--red-dim)] px-4 py-3 text-[14px] text-red">
+          {ferror === "filetype"
+            ? "Формат не поддерживается — только JPG, PNG, WEBP или PDF."
+            : ferror === "filesize"
+              ? "Файл слишком большой (максимум 12 МБ)."
+              : "Не удалось загрузить файл — выберите файл и повторите."}
+        </div>
+      )}
 
       {/* Модалка предложения создать Pickerl-задачу (§8.4) — только сразу после
           сохранения (по query-параметру), не при каждом рендере. */}
@@ -197,6 +228,94 @@ export default async function CarPage({
                 {car.nachlackierungenComment && <div>Покраска: {car.nachlackierungenComment}</div>}
                 {car.pickerlComment && <div>Pickerl: {car.pickerlComment}</div>}
               </div>
+            )}
+          </section>
+
+          {/* Фотографии (§8.5) */}
+          <section className="panel animate-in delay-2 p-5">
+            <div className="mb-4 flex items-baseline justify-between">
+              <h2 className="text-[15px] font-bold">Фотографии</h2>
+              {photos.length === 0 ? (
+                <span className="chip chip-amber !text-[10px]">без фото</span>
+              ) : (
+                <span className="text-[13px] text-muted">{photos.length}</span>
+              )}
+            </div>
+            {photos.length > 0 && (
+              <div className="mb-4 grid grid-cols-4 gap-2">
+                {photos.map((p) => (
+                  <div key={p.id} className="group relative aspect-square overflow-hidden rounded-lg border border-line bg-surface-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/api/files/${p.id}`} alt={p.filename} className="h-full w-full object-cover" />
+                    {canDeleteFile && (
+                      <form action={deleteCarFile.bind(null, p.id, car.id)} className="absolute right-1 top-1">
+                        <button type="submit" title="Удалить фото" className="rounded-md bg-black/60 px-1.5 py-0.5 text-[12px] text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--red)]">
+                          ✕
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {canUploadPhoto && storageOk && (
+              <form action={uploadCarFile.bind(null, car.id, "PHOTO")} className="flex items-center gap-2">
+                <input type="file" name="file" accept="image/jpeg,image/png,image/webp" required className="field flex-1 !py-1.5 text-[13px]" />
+                <button type="submit" className="btn btn-ghost">Загрузить</button>
+              </form>
+            )}
+            {!storageOk && (
+              <p className="text-[12px] text-muted">Хранилище файлов не настроено (S3_* переменные).</p>
+            )}
+          </section>
+
+          {/* Документы (§8.5) */}
+          <section className="panel animate-in delay-3 p-5">
+            <h2 className="mb-4 text-[15px] font-bold">Документы</h2>
+
+            <div className="mb-4 flex flex-col gap-1.5">
+              {docChecklist.map((d) => (
+                <div key={d.label} className="flex items-center gap-2 text-[13px]">
+                  <span className={d.present ? "text-green" : "text-red"}>{d.present ? "✓" : "✗"}</span>
+                  <span className={d.present ? "" : "text-muted"}>{d.label}</span>
+                  {!d.present && <span className="text-[11px] text-red">не загружен</span>}
+                </div>
+              ))}
+            </div>
+
+            {documents.length > 0 && (
+              <div className="mb-4 flex flex-col border-t border-line pt-2">
+                {documents.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between border-b border-line py-2 last:border-none">
+                    <div className="min-w-0">
+                      <div className="truncate text-[14px] font-medium">
+                        {DOC_TYPE_LABEL[d.docType ?? ""] ?? "Документ"}
+                      </div>
+                      <div className="truncate text-[12px] text-muted">{d.filename}</div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <a href={`/api/files/${d.id}?download=1`} className="btn btn-ghost !px-3 !py-1 !text-[12px]">Скачать</a>
+                      {canDeleteFile && (
+                        <form action={deleteCarFile.bind(null, d.id, car.id)}>
+                          <button type="submit" title="Удалить" className="rounded-md px-2 py-1 text-[13px] text-muted transition-colors hover:bg-[var(--red-dim)] hover:text-red">✕</button>
+                        </form>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {canUploadDoc && storageOk && (
+              <form action={uploadCarFile.bind(null, car.id, "DOCUMENT")} className="flex flex-wrap items-center gap-2">
+                <select name="docType" className="field w-[220px] !py-1.5 text-[13px]" defaultValue="KAUFVERTRAG">
+                  {DOC_TYPES.filter((t) => seeFinDocs || !t.financial).map((t) => (
+                    <option key={t.key} value={t.key}>{t.label}</option>
+                  ))}
+                </select>
+                <input type="file" name="file" accept="image/jpeg,image/png,image/webp,application/pdf" required className="field flex-1 !py-1.5 text-[13px]" />
+                <button type="submit" className="btn btn-ghost">Загрузить</button>
+              </form>
             )}
           </section>
 
