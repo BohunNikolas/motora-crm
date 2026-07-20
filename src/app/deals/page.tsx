@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
 import { createDeal, moveDealStage, loseDeal, reopenDeal, deleteDeal } from "@/lib/actions";
+import { requireUser } from "@/lib/auth";
+import { can } from "@/lib/authz";
 import { fmtMoney, fmtDate, sumMoney, dealMargin, DEAL_STAGES, DEAL_TYPE, CLIENT_TYPE } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -102,7 +105,17 @@ function DealCard({ deal, isLast }: { deal: DealFull; isLast: boolean }) {
   );
 }
 
-export default async function DealsPage() {
+export default async function DealsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const user = await requireUser();
+  // TECHNICAL не видит раздел сделок вовсе (roles-motorhof.md)
+  if (!can(user, "see.deals")) redirect("/");
+  const canSell = can(user, "sell");
+  const { error } = await searchParams;
+
   const [deals, clients, cars] = await Promise.all([
     prisma.deal.findMany({
       include: { client: true, car: { include: { expenses: true } } },
@@ -127,6 +140,14 @@ export default async function DealsPage() {
         </p>
       </header>
 
+      {error === "below-min" && (
+        <div className="animate-in mb-4 rounded-xl border border-[rgba(248,113,113,0.3)] bg-[var(--red-dim)] px-4 py-3 text-[14px] text-red">
+          Продажа ниже Mindestverkaufspreis заблокирована. Согласуйте цену с партнёром —
+          закрыть такую сделку может только роль «Партнёр» или «Админ».
+        </div>
+      )}
+
+      {canSell && (
       <details className="panel animate-in delay-1 mb-4 overflow-hidden [&[open]>summary]:border-b [&[open]>summary]:border-line">
         <summary className="cursor-pointer list-none px-5 py-4 text-[15px] font-bold transition-colors hover:text-accent">
           + Новая сделка
@@ -188,6 +209,7 @@ export default async function DealsPage() {
           </form>
         )}
       </details>
+      )}
 
       {deals.length === 0 ? (
         <div className="panel animate-in delay-2 px-5 py-14 text-center">

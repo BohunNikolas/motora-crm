@@ -51,9 +51,52 @@ model Expense {
   deductibleInputVatAmount Decimal? @db.Decimal(12, 2)
   // Уже входит в полную стоимость приобретения — не вычитать второй раз (§12.1).
   alreadyIncludedInAcquisitionCost Boolean @default(false)
+  // Kostenvoranschlag-процесс: смета TECHNICAL создаётся PENDING и не входит
+  // в маржу, пока PARTNER/ADMIN не подтвердит (roles-motorhof.md). Существующие — APPROVED.
+  approvalStatus String @default("APPROVED") // PENDING | APPROVED
   date   DateTime @default(now())
   car    Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
   carId  String
+}
+
+// ─── Аккаунты и аудит (фаза 2) ─────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String   // scrypt: "salt:hash" (hex)
+  // Мульти-роли: права = union капабилити всех ролей (roles-motorhof.md).
+  roles        String[] @default([]) // ADMIN | PARTNER | SALES | TECHNICAL | READ_ONLY
+  mustChangePassword Boolean @default(true)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  sessions     Session[]
+  auditLogs    AuditLog[]
+}
+
+model Session {
+  token     String   @id // случайные 32 байта hex
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String   // Car | Expense | Deal | Client | Task | User
+  entityId   String
+  action     String   // create | update | delete | status | approve | override…
+  before     Json?
+  after      Json?
+  reason     String?  // для override — обязательный комментарий
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId     String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }
 
 model Client {

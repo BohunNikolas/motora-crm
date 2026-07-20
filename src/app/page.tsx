@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
+import { viewerFlags } from "@/lib/authz";
 import {
   fmtMoney,
   sumMoney,
@@ -16,6 +18,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
+  const user = await requireUser();
+  const flags = viewerFlags(user);
+
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -72,30 +77,41 @@ export default async function Dashboard() {
   }));
   const maxCount = Math.max(1, ...stageCounts.map((s) => s.count));
 
+  // Redaction: карточки с запрещёнными суммами не попадают в массив вообще —
+  // их цифр нет в HTML для этой роли (SALES: без маржи и стоимости склада;
+  // TECHNICAL: только количество авто).
   const stats = [
     {
       label: "Авто в наличии",
       value: String(inStock.length),
-      sub: `на ${fmtMoney(stockValue)}`,
+      sub: flags.seeMargin ? `на ${fmtMoney(stockValue)}` : "на складе",
     },
-    {
-      label: "Сделки в работе",
-      value: String(activeDeals.length),
-      sub: `потенциал ${fmtMoney(pipelineValue)}`,
-    },
-    {
-      label: "Продано за месяц",
-      value: String(doneDealsMonth.length),
-      sub: `выручка ${fmtMoney(revenue)}`,
-    },
-    {
-      label: "Маржа за месяц",
-      value: fmtMoney(margin),
-      sub: revenue.gt(0)
-        ? `${Math.round(margin.div(revenue).times(100).toNumber())}% от выручки`
-        : "нет продаж",
-      accent: true,
-    },
+    ...(flags.seeDeals && flags.seeSalePrice
+      ? [
+          {
+            label: "Сделки в работе",
+            value: String(activeDeals.length),
+            sub: `потенциал ${fmtMoney(pipelineValue)}`,
+          },
+          {
+            label: "Продано за месяц",
+            value: String(doneDealsMonth.length),
+            sub: `выручка ${fmtMoney(revenue)}`,
+          },
+        ]
+      : []),
+    ...(flags.seeMargin
+      ? [
+          {
+            label: "Маржа за месяц",
+            value: fmtMoney(margin),
+            sub: revenue.gt(0)
+              ? `${Math.round(margin.div(revenue).times(100).toNumber())}% от выручки`
+              : "нет продаж",
+            accent: true,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -110,12 +126,12 @@ export default async function Dashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/cars/new" className="btn btn-primary">+ Авто</Link>
-          <Link href="/deals" className="btn btn-ghost">Сделки</Link>
+          {flags.canEditCar && <Link href="/cars/new" className="btn btn-primary">+ Авто</Link>}
+          {flags.seeDeals && <Link href="/deals" className="btn btn-ghost">Сделки</Link>}
         </div>
       </header>
 
-      <div className="mb-6 grid grid-cols-4 gap-4">
+      <div className={`mb-6 grid gap-4 ${stats.length === 4 ? "grid-cols-4" : stats.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
         {stats.map((s, i) => (
           <div key={s.label} className={`panel panel-hover animate-in delay-${i + 1} p-5`}>
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted">
@@ -129,7 +145,8 @@ export default async function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
+      <div className={`grid gap-4 ${flags.seeDeals ? "grid-cols-5" : "grid-cols-2"}`}>
+        {flags.seeDeals && (
         <div className="panel animate-in delay-3 col-span-3 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-[15px] font-bold">Воронка продаж</h2>
@@ -196,8 +213,9 @@ export default async function Dashboard() {
             )}
           </div>
         </div>
+        )}
 
-        <div className="col-span-2 flex flex-col gap-4">
+        <div className={`flex flex-col gap-4 ${flags.seeDeals ? "col-span-2" : "col-span-2"}`}>
           <div className="panel animate-in delay-4 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-[15px] font-bold">Задачи</h2>

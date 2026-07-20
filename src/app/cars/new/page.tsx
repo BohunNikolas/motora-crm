@@ -1,8 +1,16 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CarForm } from "@/components/car-form";
 import { createCar } from "@/lib/actions";
+import { requireUser } from "@/lib/auth";
+import { can } from "@/lib/authz";
 
-export default function NewCarPage() {
+export const dynamic = "force-dynamic";
+
+export default async function NewCarPage() {
+  const user = await requireUser();
+  // Полная форма содержит закупочные цены — только ADMIN/PARTNER
+  if (!can(user, "edit.car")) redirect("/cars");
   return (
     <div>
       <header className="animate-in mb-6">

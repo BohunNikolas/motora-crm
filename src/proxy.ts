@@ -2,47 +2,30 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Общий вход по паролю для команды (MVP-заглушка вместо личных аккаунтов).
- *
- * Включается переменной окружения APP_PASSWORD. Если её нет — защита выключена,
- * поэтому локальная разработка не требует пароля, а прод без переменной просто
- * останется открытым (не сломается).
- *
- * Логин любой, пароль — значение APP_PASSWORD.
- *
- * ВНИМАНИЕ: Basic Auth передаёт пароль в каждом запросе и не имеет кнопки «выйти».
- * Это временное решение на период обкатки. Личные аккаунты и роли — этап после MVP,
- * до продажи продукта их нужно сделать обязательно.
+ * Шлюз аутентификации (фаза 2): вход по личным аккаунтам вместо общего
+ * Basic Auth пароля. Здесь проверяется только НАЛИЧИЕ cookie сессии —
+ * дёшево, без БД. Настоящая валидация (сессия жива, пользователь активен)
+ * происходит в requireUser()/getSessionUser() при рендере страницы.
+ * Поддельная кука пройдёт proxy, но упрётся в лукап по БД и получит /login.
  */
+
+const SESSION_COOKIE = "mh_session";
+const PUBLIC_PATHS = ["/login", "/icon.svg"];
+
 export function proxy(request: NextRequest) {
-  const expected = process.env.APP_PASSWORD;
-  if (!expected) return NextResponse.next();
-
-  const header = request.headers.get("authorization");
-
-  if (header?.startsWith("Basic ")) {
-    const decoded = Buffer.from(header.slice(6), "base64").toString("utf8");
-    // Пароль может содержать «:», поэтому режем только по первому разделителю
-    const password = decoded.slice(decoded.indexOf(":") + 1);
-    if (safeEqual(password, expected)) return NextResponse.next();
+  const { pathname } = request.nextUrl;
+  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+    return NextResponse.next();
   }
-
-  return new NextResponse("Требуется авторизация", {
-    status: 401,
-    headers: { "WWW-Authenticate": 'Basic realm="MOTORA CRM", charset="UTF-8"' },
-  });
-}
-
-/** Сравнение за постоянное время — чтобы пароль нельзя было подобрать по скорости ответа */
-function safeEqual(a: string, b: string) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
+  if (!request.cookies.get(SESSION_COOKIE)?.value) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+  return NextResponse.next();
 }
 
 export const config = {
-  // Статику и картинки не проверяем — они и так не содержат данных,
-  // а лишние проверки только замедляют загрузку.
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

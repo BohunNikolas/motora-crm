@@ -14,7 +14,10 @@
 - Prisma зафиксирован на **v6** (`prisma@6`, `@prisma/client@6`). НЕ обновлять до 7 — там ломающая смена конфигурации.
 - Next.js **16** (App Router, Turbopack): `params` и `searchParams` в страницах — асинхронные (`await params`). `revalidatePath` работает как раньше.
 - База: **Postgres на Neon** (Frankfurt), и локально, и на проде — одна и та же. Строка подключения в `.env` (`DATABASE_URL`), файл в git не попадает, шаблон — в `.env.example`. SQLite был только на этапах 1–7, сейчас его нет.
-- Вход по общему паролю: `src/proxy.ts` + переменная `APP_PASSWORD`. Без переменной защита выключена — так удобно локально.
+- **Аутентификация (фаза 2): личные аккаунты**, БЕЗ Basic Auth/APP_PASSWORD. Сессии в Postgres + httpOnly-cookie `mh_session`; пароли scrypt (node:crypto, без зависимостей). `src/proxy.ts` — только редирект на /login при отсутствии cookie; настоящая валидация в `requireUser()`/`getSessionUser()` (`src/lib/auth.ts`). Пользователи создаются `node prisma/seed-users.mjs` (идемпотентен, паролей не сбрасывает).
+- **Авторизация: капабилити-матрица `src/lib/authz.ts`** (спецификация: `docs/roles-motorhof.md`). Роли ADMIN/PARTNER/SALES/TECHNICAL/READ_ONLY, мульти-роль = union. В Server Actions — `requireCan(...)`; в страницах — `viewerFlags(user)`/`can(user, cap)` и УСЛОВНЫЙ РЕНДЕР запрещённых блоков (redaction: цифр нет в HTML, не «спрятано CSS»). НИКОГДА не проверять `if (role === ...)` по коду.
+- **AuditLog** (`audit()` в auth.ts) — писать при каждой мутации Car/Expense/Deal/Client/Task с before/after; для override — reason.
+- **Kostenvoranschlag:** `Expense.approvalStatus` PENDING/APPROVED; финансовые хелперы (`format.ts`) считают ТОЛЬКО APPROVED.
 
 ## Стек
 

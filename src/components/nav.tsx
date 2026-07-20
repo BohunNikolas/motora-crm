@@ -55,11 +55,12 @@ const ITEMS = [
   },
 ];
 
-export function Nav() {
+export function Nav({ showDeals = true }: { showDeals?: boolean }) {
   const pathname = usePathname();
+  const items = ITEMS.filter((i) => showDeals || i.href !== "/deals");
   return (
     <nav className="flex flex-col gap-1">
-      {ITEMS.map((item) => {
+      {items.map((item) => {
         const active =
           item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         return (

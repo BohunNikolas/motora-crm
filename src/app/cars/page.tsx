@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Cell } from "@/components/cell-link";
+import { requireUser } from "@/lib/auth";
+import { viewerFlags } from "@/lib/authz";
 import { fmtMoney, sumMoney, carCost, carMargin, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +13,8 @@ export default async function CarsPage({
   searchParams: Promise<{ q?: string; status?: string }>;
 }) {
   const { q, status } = await searchParams;
+  const user = await requireUser();
+  const flags = viewerFlags(user);
 
   const all = await prisma.car.findMany({
     where: status && CAR_STATUS[status] ? { status } : undefined,
@@ -51,10 +55,13 @@ export default async function CarsPage({
           <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">Автомобили</h1>
           <p className="mt-1 text-sm text-muted">
             {filtered ? `найдено ${cars.length} из ${total}` : `${total} в базе`}
-            {cars.length > 0 && ` · себестоимость ${fmtMoney(totalCost)} · маржа ${fmtMoney(totalMargin)}`}
+            {flags.seeMargin && cars.length > 0 &&
+              ` · себестоимость ${fmtMoney(totalCost)} · маржа ${fmtMoney(totalMargin)}`}
           </p>
         </div>
-        <Link href="/cars/new" className="btn btn-primary">+ Добавить авто</Link>
+        {flags.canEditCar && (
+          <Link href="/cars/new" className="btn btn-primary">+ Добавить авто</Link>
+        )}
       </header>
 
       <div className="animate-in delay-1 mb-4 flex items-center justify-between gap-4">
@@ -110,16 +117,19 @@ export default async function CarsPage({
           <div className="overflow-x-auto">
             {/* min-w: без него width:100% сплющивает колонки на узком окне —
                 названия переносятся, строки раздуваются. Лучше честный скролл. */}
-            <table className="table min-w-[900px]">
+            <table className={`table ${flags.seeAcquisition ? "min-w-[900px]" : "min-w-[640px]"}`}>
+              {/* Redaction: закупка/расходы/себестоимость/маржа рендерятся ТОЛЬКО
+                  для ролей с see.acquisition/see.margin — в HTML других ролей их нет.
+                  Цена продажи — только с see.salePrice (TECHNICAL не видит и её). */}
               <thead>
                 <tr>
                   <th>Автомобиль</th>
                   <th className="text-right">Пробег</th>
-                  <th className="text-right">Закупка</th>
-                  <th className="text-right">Расходы</th>
-                  <th className="text-right">Себестоимость</th>
-                  <th className="text-right">Цена</th>
-                  <th className="text-right">Маржа</th>
+                  {flags.seeAcquisition && <th className="text-right">Закупка</th>}
+                  {flags.seeAcquisition && <th className="text-right">Расходы</th>}
+                  {flags.seeAcquisition && <th className="text-right">Себестоимость</th>}
+                  {flags.seeSalePrice && <th className="text-right">Цена</th>}
+                  {flags.seeMargin && <th className="text-right">Маржа</th>}
                   <th>Статус</th>
                   <th />
                 </tr>
@@ -142,40 +152,52 @@ export default async function CarsPage({
                       <Cell href={href} className="mono text-right text-muted">
                         {c.mileage.toLocaleString("ru-RU")}
                       </Cell>
-                      <Cell href={href} className="mono text-right">
-                        {fmtMoney(c.purchasePrice)}
-                      </Cell>
-                      <Cell href={href} className="mono text-right text-muted">
-                        {expenses.gt(0) ? fmtMoney(expenses) : "—"}
-                      </Cell>
-                      <Cell href={href} className="mono text-right">
-                        {fmtMoney(carCost(c))}
-                      </Cell>
-                      <Cell href={href} className="mono text-right">
-                        {fmtMoney(c.listPrice)}
-                      </Cell>
-                      <Cell
-                        href={href}
-                        className={`mono text-right font-bold ${margin.gte(0) ? "text-green" : "text-red"}`}
-                      >
-                        {fmtMoney(margin)}
-                      </Cell>
+                      {flags.seeAcquisition && (
+                        <Cell href={href} className="mono text-right">
+                          {fmtMoney(c.purchasePrice)}
+                        </Cell>
+                      )}
+                      {flags.seeAcquisition && (
+                        <Cell href={href} className="mono text-right text-muted">
+                          {expenses.gt(0) ? fmtMoney(expenses) : "—"}
+                        </Cell>
+                      )}
+                      {flags.seeAcquisition && (
+                        <Cell href={href} className="mono text-right">
+                          {fmtMoney(carCost(c))}
+                        </Cell>
+                      )}
+                      {flags.seeSalePrice && (
+                        <Cell href={href} className="mono text-right">
+                          {fmtMoney(c.listPrice)}
+                        </Cell>
+                      )}
+                      {flags.seeMargin && (
+                        <Cell
+                          href={href}
+                          className={`mono text-right font-bold ${margin.gte(0) ? "text-green" : "text-red"}`}
+                        >
+                          {fmtMoney(margin)}
+                        </Cell>
+                      )}
                       <Cell href={href}>
                         <span className={`chip ${CAR_STATUS[c.status]?.cls ?? "chip-muted"}`}>
                           {CAR_STATUS[c.status]?.label ?? c.status}
                         </span>
                       </Cell>
                       <td className="w-px whitespace-nowrap">
-                        <Link
-                          href={`${href}/edit`}
-                          title={`Редактировать ${c.make} ${c.model}`}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-accent"
-                        >
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                            <path d="m15 5 4 4" />
-                          </svg>
-                        </Link>
+                        {flags.canEditCar && (
+                          <Link
+                            href={`${href}/edit`}
+                            title={`Редактировать ${c.make} ${c.model}`}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-accent"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                              <path d="m15 5 4 4" />
+                            </svg>
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   );

@@ -75,7 +75,13 @@ export type CarExpenseLike = {
   amountNet: Prisma.Decimal | null;
   deductibleInputVatAmount: Prisma.Decimal | null;
   alreadyIncludedInAcquisitionCost: boolean;
+  // Kostenvoranschlag: PENDING-сметы НЕ входят в себестоимость и маржу,
+  // пока PARTNER/ADMIN не подтвердит (roles-motorhof.md §2).
+  approvalStatus: string;
 };
+
+const approvedOnly = (expenses: CarExpenseLike[]) =>
+  expenses.filter((e) => e.approvalStatus === "APPROVED");
 
 export type CarForFinance = {
   taxScheme: string;
@@ -91,7 +97,7 @@ const financeInput = (car: CarForFinance, salePriceGross: Num) => ({
   totalCashAcquisitionCost: car.purchasePrice,
   einkaufspreisGemaess24: car.einkaufspreisGemaess24 ?? car.purchasePrice,
   salePriceGross,
-  expenses: car.expenses.map((e) => ({
+  expenses: approvedOnly(car.expenses).map((e) => ({
     amountGross: e.amountGross,
     amountNet: e.amountNet,
     deductibleInputVatAmount: e.deductibleInputVatAmount,
@@ -99,10 +105,10 @@ const financeInput = (car: CarForFinance, salePriceGross: Num) => ({
   })),
 });
 
-/** Себестоимость (кэш на входе): закупка + расходы, не входящие в неё. */
+/** Себестоимость (кэш на входе): закупка + подтверждённые расходы, не входящие в неё. */
 export const carCost = (car: CarForFinance): Dec =>
   round2(
-    car.expenses
+    approvedOnly(car.expenses)
       .filter((e) => !e.alreadyIncludedInAcquisitionCost)
       .reduce((s, e) => s.plus(dec(e.amountGross)), dec(car.purchasePrice))
   );
@@ -192,4 +198,12 @@ export const CURRENT_OWNER: Record<string, string> = {
   MRIYA_MOTORS: "Mriya Motors",
   A_MOTORS: "A Motors",
   AUTOHUB: "AutoHub",
+};
+
+export const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Админ",
+  PARTNER: "Партнёр",
+  SALES: "Продажи",
+  TECHNICAL: "Техника",
+  READ_ONLY: "Просмотр",
 };

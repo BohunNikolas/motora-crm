@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
-import { addExpense, deleteExpense, deleteCar, setCarStatus } from "@/lib/actions";
+import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus } from "@/lib/actions";
+import { requireUser } from "@/lib/auth";
+import { can } from "@/lib/authz";
 import {
   fmtMoney,
   fmtDate,
@@ -21,6 +23,14 @@ export const dynamic = "force-dynamic";
 
 export default async function CarPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await requireUser();
+
+  // Redaction (roles-motorhof.md): запрещённые блоки НЕ рендерятся на сервере —
+  // их цифр физически нет в HTML, который получает браузер.
+  const seeMoney = can(user, "see.margin"); // экономика, расходы €, себестоимость
+  const seeSalePrice = can(user, "see.salePrice");
+  const seeExpenses = seeMoney || can(user, "edit.tech"); // TECHNICAL видит расходы по авто (свои сметы)
+  const canAdd = can(user, "expense.add") || can(user, "expense.addPending");
 
   const car = await prisma.car.findUnique({
     where: { id },
@@ -69,14 +79,18 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
             </div>
           </div>
           <div className="flex gap-2">
-            <Link href={`/cars/${car.id}/edit`} className="btn btn-ghost">Редактировать</Link>
-            <form action={deleteCar.bind(null, car.id)}>
-              <ConfirmButton
-                message={`Удалить ${car.make} ${car.model}? Расходы по авто удалятся вместе с ним. Действие необратимо.`}
-              >
-                Удалить
-              </ConfirmButton>
-            </form>
+            {can(user, "edit.car") && (
+              <Link href={`/cars/${car.id}/edit`} className="btn btn-ghost">Редактировать</Link>
+            )}
+            {can(user, "delete.any") && (
+              <form action={deleteCar.bind(null, car.id)}>
+                <ConfirmButton
+                  message={`Удалить ${car.make} ${car.model}? Расходы по авто удалятся вместе с ним. Действие необратимо.`}
+                >
+                  Удалить
+                </ConfirmButton>
+              </form>
+            )}
           </div>
         </div>
       </header>
@@ -101,11 +115,12 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
             )}
           </section>
 
+          {seeExpenses && (
           <section className="panel animate-in delay-2 p-5">
             <div className="mb-4 flex items-baseline justify-between">
               <h2 className="text-[15px] font-bold">Расходы на подготовку</h2>
               <span className="mono text-[14px] font-bold">
-                {expensesTotal ? fmtMoney(expensesTotal) : "—"}
+                {expensesTotal.gt(0) ? fmtMoney(expensesTotal) : "—"}
               </span>
             </div>
 
@@ -117,53 +132,74 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
                     className="flex items-center justify-between border-b border-line py-2.5 last:border-none"
                   >
                     <div>
-                      <div className="text-[14px] font-medium">{e.title}</div>
+                      <div className="flex items-center gap-2 text-[14px] font-medium">
+                        {e.title}
+                        {e.approvalStatus === "PENDING" && (
+                          <span className="chip chip-blue !px-1.5 !text-[10px]">на подтверждении</span>
+                        )}
+                      </div>
                       <div className="text-[12px] text-muted">{fmtDate(e.date)}</div>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="mono text-[14px]">{fmtMoney(e.amountGross)}</span>
-                      <form action={deleteExpense.bind(null, e.id, car.id)}>
-                        <button
-                          type="submit"
-                          title="Удалить расход"
-                          className="rounded-md px-2 py-1 text-[13px] text-muted transition-colors hover:bg-[var(--red-dim)] hover:text-red"
-                        >
-                          ✕
-                        </button>
-                      </form>
+                      {e.approvalStatus === "PENDING" && can(user, "expense.approve") && (
+                        <form action={approveExpense.bind(null, e.id, car.id)}>
+                          <button type="submit" className="btn btn-ghost !px-3 !py-1 !text-[12px]">
+                            Подтвердить
+                          </button>
+                        </form>
+                      )}
+                      {can(user, "delete.any") && (
+                        <form action={deleteExpense.bind(null, e.id, car.id)}>
+                          <button
+                            type="submit"
+                            title="Удалить расход"
+                            className="rounded-md px-2 py-1 text-[13px] text-muted transition-colors hover:bg-[var(--red-dim)] hover:text-red"
+                          >
+                            ✕
+                          </button>
+                        </form>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="rounded-xl border border-line bg-surface-2 p-4">
-              <div className="label mb-2.5">Добавить расход</div>
-              <form action={addExpense.bind(null, car.id)} className="flex gap-2">
-                <input
-                  name="title"
-                  required
-                  className="field flex-1 bg-surface"
-                  placeholder="Замена колодок"
-                />
-                <input
-                  name="amount"
-                  type="number"
-                  required
-                  min={0}
-                  className="field mono w-[130px] bg-surface"
-                  placeholder="250"
-                />
-                <button type="submit" className="btn btn-primary">Добавить</button>
-              </form>
-              <p className="mt-2.5 text-[12px] text-muted">
-                {car.expenses.length === 0
-                  ? "Химчистка, ремонт, детейлинг — всё, что вошло в подготовку. Сразу попадёт в себестоимость и пересчитает маржу."
-                  : "Попадёт в себестоимость и пересчитает маржу."}
-              </p>
-            </div>
+            {canAdd && (
+              <div className="rounded-xl border border-line bg-surface-2 p-4">
+                <div className="label mb-2.5">
+                  {can(user, "expense.add") ? "Добавить расход" : "Смета (Kostenvoranschlag)"}
+                </div>
+                <form action={addExpense.bind(null, car.id)} className="flex gap-2">
+                  <input
+                    name="title"
+                    required
+                    className="field flex-1 bg-surface"
+                    placeholder="Замена колодок"
+                  />
+                  <input
+                    name="amount"
+                    type="number"
+                    step="0.01"
+                    required
+                    min={0}
+                    className="field mono w-[130px] bg-surface"
+                    placeholder="250"
+                  />
+                  <button type="submit" className="btn btn-primary">Добавить</button>
+                </form>
+                <p className="mt-2.5 text-[12px] text-muted">
+                  {can(user, "expense.add")
+                    ? "Попадёт в себестоимость и пересчитает маржу."
+                    : "Смета уйдёт на подтверждение партнёру — в расходы попадёт после одобрения."}
+                </p>
+              </div>
+            )}
           </section>
+          )}
 
+          {can(user, "see.deals") && (
           <section className="panel animate-in delay-3 p-5">
             <h2 className="mb-4 text-[15px] font-bold">Сделки по этому авто</h2>
             {car.deals.length === 0 ? (
@@ -193,9 +229,41 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
               </div>
             )}
           </section>
+          )}
         </div>
 
         <div className="flex flex-col gap-4">
+          {!seeMoney && seeSalePrice && (
+            <section className="panel animate-in delay-2 p-5">
+              <h2 className="mb-4 text-[15px] font-bold">Цены</h2>
+              <div className="flex flex-col gap-2.5 text-[14px]">
+                <div className="flex justify-between gap-3">
+                  <span className="shrink-0 text-muted">Verkaufspreis</span>
+                  <span className="mono font-bold">{fmtMoney(car.plannedSalePriceGross ?? car.listPrice)}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="shrink-0 text-muted">Mindestpreis</span>
+                  <span className="mono">
+                    {car.minimumSalePriceGross ? fmtMoney(car.minimumSalePriceGross) : "не задан"}
+                  </span>
+                </div>
+                {car.minimumSalePriceGross && (
+                  <div className="flex justify-between gap-3">
+                    <span className="shrink-0 text-muted">Допустимая скидка</span>
+                    <span className="mono">
+                      {fmtMoney((car.plannedSalePriceGross ?? car.listPrice).minus(car.minimumSalePriceGross))}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between gap-3 border-t border-line pt-2.5 text-[13px]">
+                  <span className="shrink-0 text-muted">Режим</span>
+                  <span className="text-right">{TAX_SCHEME[car.taxScheme] ?? car.taxScheme}</span>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {seeMoney && (
           <section className="panel animate-in delay-2 p-5">
             <h2 className="mb-4 text-[15px] font-bold">Экономика</h2>
             <div className="mb-3 flex items-center justify-between text-[13px]">
@@ -243,24 +311,33 @@ export default async function CarPage({ params }: { params: Promise<{ id: string
               <div className="mt-1.5 text-[13px] text-muted">наценка {markup}% к себестоимости</div>
             </div>
           </section>
+          )}
 
           <section className="panel animate-in delay-3 p-5">
             <h2 className="mb-1 text-[15px] font-bold">Статус</h2>
             <p className="mb-4 text-[13px] text-muted">Нажмите, чтобы изменить.</p>
             <div className="flex flex-wrap gap-2">
-              {CAR_STATUS_ORDER.map((s) => (
-                <form key={s} action={setCarStatus.bind(null, car.id, s)}>
-                  <button
-                    type="submit"
-                    disabled={s === car.status}
-                    className={`chip ${s === car.status ? CAR_STATUS[s].cls : "chip-muted"} ${
-                      s === car.status ? "cursor-default ring-1 ring-[var(--border-strong)]" : "cursor-pointer opacity-70 hover:opacity-100"
-                    }`}
-                  >
-                    {CAR_STATUS[s].label}
-                  </button>
-                </form>
-              ))}
+              {CAR_STATUS_ORDER.map((s) => {
+                // Кнопки статусов — по правам роли (зеркалит проверку в setCarStatus):
+                // SALES — продажные, TECHNICAL — подготовительные, ADMIN/PARTNER — все.
+                const allowed =
+                  (can(user, "status.sales") && ["RESERVED", "SOLD", "AVAILABLE"].includes(s)) ||
+                  (can(user, "status.tech") && ["PREP", "AVAILABLE"].includes(s));
+                if (!allowed && s !== car.status) return null;
+                return (
+                  <form key={s} action={setCarStatus.bind(null, car.id, s)}>
+                    <button
+                      type="submit"
+                      disabled={s === car.status || !allowed}
+                      className={`chip ${s === car.status ? CAR_STATUS[s].cls : "chip-muted"} ${
+                        s === car.status ? "cursor-default ring-1 ring-[var(--border-strong)]" : "cursor-pointer opacity-70 hover:opacity-100"
+                      }`}
+                    >
+                      {CAR_STATUS[s].label}
+                    </button>
+                  </form>
+                );
+              })}
             </div>
           </section>
         </div>

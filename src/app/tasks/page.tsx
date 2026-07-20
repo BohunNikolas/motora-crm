@@ -3,12 +3,14 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createTask, toggleTask, deleteTask } from "@/lib/actions";
 import { dueLabel, isOverdue, startOfToday } from "@/lib/format";
+import { requireUser } from "@/lib/auth";
+import { viewerFlags, type ViewerFlags } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
 type TaskFull = Prisma.TaskGetPayload<{ include: { client: true; car: true } }>;
 
-function TaskRow({ task }: { task: TaskFull }) {
+function TaskRow({ task, flags }: { task: TaskFull; flags: ViewerFlags }) {
   const overdue = !task.done && isOverdue(task.dueDate);
 
   return (
@@ -52,15 +54,17 @@ function TaskRow({ task }: { task: TaskFull }) {
         </div>
       </div>
 
-      <form action={deleteTask.bind(null, task.id)} className="flex">
-        <button
-          type="submit"
-          title="Удалить задачу"
-          className="rounded-md px-2 py-1 text-[13px] text-muted transition-colors hover:bg-[var(--red-dim)] hover:text-red"
-        >
-          ✕
-        </button>
-      </form>
+      {flags.canDelete && (
+        <form action={deleteTask.bind(null, task.id)} className="flex">
+          <button
+            type="submit"
+            title="Удалить задачу"
+            className="rounded-md px-2 py-1 text-[13px] text-muted transition-colors hover:bg-[var(--red-dim)] hover:text-red"
+          >
+            ✕
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -69,10 +73,12 @@ function Group({
   title,
   tasks,
   tone,
+  flags,
 }: {
   title: string;
   tasks: TaskFull[];
   tone?: "red" | "amber";
+  flags: ViewerFlags;
 }) {
   if (tasks.length === 0) return null;
   return (
@@ -85,7 +91,7 @@ function Group({
       </h2>
       <div className="flex flex-col">
         {tasks.map((t) => (
-          <TaskRow key={t.id} task={t} />
+          <TaskRow key={t.id} task={t} flags={flags} />
         ))}
       </div>
     </section>
@@ -93,6 +99,8 @@ function Group({
 }
 
 export default async function TasksPage() {
+  const user = await requireUser();
+  const flags = viewerFlags(user);
   const [tasks, clients, cars] = await Promise.all([
     prisma.task.findMany({
       include: { client: true, car: true },
@@ -128,6 +136,7 @@ export default async function TasksPage() {
         </p>
       </header>
 
+      {flags.canManageTasks && (
       <form action={createTask} className="panel animate-in delay-1 mb-4 flex flex-wrap gap-2 p-4">
         <input name="title" required className="field min-w-[240px] flex-1" placeholder="Перезвонить по Camry" />
         <input name="dueDate" type="date" className="field w-[150px]" />
@@ -147,6 +156,7 @@ export default async function TasksPage() {
         </select>
         <button type="submit" className="btn btn-primary">+ Задача</button>
       </form>
+      )}
 
       {tasks.length === 0 ? (
         <div className="panel animate-in delay-2 px-5 py-14 text-center">
@@ -158,10 +168,10 @@ export default async function TasksPage() {
         </div>
       ) : (
         <div className="animate-in delay-2 flex flex-col gap-4">
-          <Group title="Просрочено" tasks={overdue} tone="red" />
-          <Group title="Сегодня" tasks={dueToday} tone="amber" />
-          <Group title="Предстоящие" tasks={upcoming} />
-          <Group title="Без срока" tasks={noDate} />
+          <Group title="Просрочено" tasks={overdue} tone="red" flags={flags} />
+          <Group title="Сегодня" tasks={dueToday} tone="amber" flags={flags} />
+          <Group title="Предстоящие" tasks={upcoming} flags={flags} />
+          <Group title="Без срока" tasks={noDate} flags={flags} />
 
           {open.length === 0 && (
             <div className="panel px-5 py-10 text-center">
@@ -177,7 +187,7 @@ export default async function TasksPage() {
               </summary>
               <div className="border-t border-line px-5 py-2">
                 {done.map((t) => (
-                  <TaskRow key={t.id} task={t} />
+                  <TaskRow key={t.id} task={t} flags={flags} />
                 ))}
               </div>
             </details>

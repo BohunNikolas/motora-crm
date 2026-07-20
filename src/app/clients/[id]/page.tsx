@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
 import { deleteClient } from "@/lib/actions";
 import { fmtMoney, fmtDate, dueLabel, isOverdue, CLIENT_TYPE, STAGE_LABEL, DEAL_TYPE } from "@/lib/format";
+import { requireUser } from "@/lib/auth";
+import { viewerFlags } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,8 @@ const TYPE_CLS: Record<string, string> = {
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await requireUser();
+  const flags = viewerFlags(user);
 
   const client = await prisma.client.findUnique({
     where: { id },
@@ -60,7 +64,10 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
           <div className="flex gap-2">
-            <Link href={`/clients/${client.id}/edit`} className="btn btn-ghost">Редактировать</Link>
+            {flags.canManageClients && (
+              <Link href={`/clients/${client.id}/edit`} className="btn btn-ghost">Редактировать</Link>
+            )}
+            {flags.canDelete && (
             <form action={deleteClient.bind(null, client.id)}>
               <ConfirmButton
                 message={
@@ -72,6 +79,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                 Удалить
               </ConfirmButton>
             </form>
+            )}
           </div>
         </div>
       </header>

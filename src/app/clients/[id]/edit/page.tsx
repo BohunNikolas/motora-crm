@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth";
+import { can } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { ClientFields } from "@/components/client-form";
 import { updateClient } from "@/lib/actions";
@@ -8,6 +10,8 @@ export const dynamic = "force-dynamic";
 
 export default async function EditClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await requireUser();
+  if (!can(user, "client.manage")) redirect(`/clients/${id}`);
   const client = await prisma.client.findUnique({ where: { id } });
   if (!client) notFound();
 

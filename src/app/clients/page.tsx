@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Cell } from "@/components/cell-link";
+import { requireUser } from "@/lib/auth";
+import { viewerFlags } from "@/lib/authz";
 import { ClientFields } from "@/components/client-form";
 import { createClient } from "@/lib/actions";
 import { fmtDate, CLIENT_TYPE } from "@/lib/format";
@@ -19,6 +21,8 @@ export default async function ClientsPage({
   searchParams: Promise<{ q?: string; type?: string }>;
 }) {
   const { q, type } = await searchParams;
+  const user = await requireUser();
+  const flags = viewerFlags(user);
 
   const all = await prisma.client.findMany({
     where: type && CLIENT_TYPE[type] ? { type } : undefined,
@@ -56,6 +60,7 @@ export default async function ClientsPage({
         </p>
       </header>
 
+      {flags.canManageClients && (
       <details className="panel animate-in delay-1 mb-4 overflow-hidden [&[open]>summary]:border-b [&[open]>summary]:border-line">
         <summary className="cursor-pointer list-none px-5 py-4 text-[15px] font-bold transition-colors hover:text-accent">
           + Добавить клиента
@@ -65,6 +70,7 @@ export default async function ClientsPage({
           <button type="submit" className="btn btn-primary mt-4">Добавить</button>
         </form>
       </details>
+      )}
 
       <div className="animate-in delay-2 mb-4 flex items-center justify-between gap-4">
         <div className="flex flex-wrap gap-2">
@@ -149,6 +155,7 @@ export default async function ClientsPage({
                         {fmtDate(c.createdAt)}
                       </Cell>
                       <td className="w-px whitespace-nowrap">
+                        {flags.canManageClients && (
                         <Link
                           href={`${href}/edit`}
                           title={`Редактировать: ${c.name}`}
@@ -159,6 +166,7 @@ export default async function ClientsPage({
                             <path d="m15 5 4 4" />
                           </svg>
                         </Link>
+                        )}
                       </td>
                     </tr>
                   );
