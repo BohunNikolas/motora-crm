@@ -16,13 +16,17 @@
 
 ## Пользователи (назначение ролей)
 
-| Пользователь | Роли |
-|---|---|
-| Иван | ADMIN + PARTNER + SALES |
-| Виталик | PARTNER + SALES |
-| Сергей | PARTNER + TECHNICAL |
-| Наёмный продавец | SALES |
-| Работник AutoHub | TECHNICAL |
+Email'ы — временные заглушки `@motorhof.local` (решение 20.07); корпоративные пользователь пришлёт позже, тогда обновить. Вход: временные пароли, выдаёт админ; форма смены пароля обязательна.
+
+| Пользователь | Email (временный) | Роли |
+|---|---|---|
+| Иван | ivan@motorhof.local | ADMIN + PARTNER + SALES |
+| Виталик | vitalik@motorhof.local | PARTNER + SALES |
+| Сергей | sergey@motorhof.local | PARTNER + TECHNICAL |
+| Наёмный продавец | sales@motorhof.local | SALES |
+| Работник AutoHub | autohub@motorhof.local | TECHNICAL |
+
+READ_ONLY — роль существует в системе, но пока никому не назначена (заведём позже, решение 20.07).
 
 ## Капабилити-матрица (что реально проверяет код)
 
@@ -46,7 +50,7 @@
 | sell.belowMin (продажа ниже минимума) | ✓ | ✓ | ✗ (нужен override PARTNER) | ✗ | ✗ |
 | reserve (бронь + Anzahlung) | ✓ | ✓ | ✓ | ✗ | ✗ |
 | sell (оформить продажу, Kaufvertrag, выдача, статус SOLD) | ✓ | ✓ | ✓ | ✗ | ✗ |
-| edit.tech (диагностика, Pickerl, Serviceheft, покрасы, §57a) | ✓ | ✓† | ✗ | ✓ | ✗ |
+| edit.tech (диагностика, Pickerl, Serviceheft, покрасы, §57a) | ✓ | ✗† | ✗ | ✓ | ✗ |
 | createKostenvoranschlag (смета ремонта — статус «на подтверждении») | ✓ | ✓ | ✗ | ✓ | ✗ |
 | approveExpense (подтвердить смету AutoHub → расход) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | status.techFlow (IN_PREPARATION, IN_SERVICE, WAITING_FOR_PHOTOS, READY_FOR_SALE) | ✓ | ✓ | частично‡ | ✓ | ✗ |
@@ -57,7 +61,7 @@
 | delete / restoreHistory | ✓ | ✗ | ✗ | ✗ | ✗ |
 
 \* TECHNICAL не видит цены продажи и Mindestverkaufspreis — только техчасть.
-† PARTNER технически может редактировать техчасть? По спецификации техчасть ведёт TECHNICAL; PARTNER — согласования. **Открытый вопрос** — уточнить, может ли чистый PARTNER править диагностику. Пока: edit.tech = TECHNICAL/ADMIN.
+† РЕШЕНО (20.07): чистый PARTNER техчасть НЕ редактирует. edit.tech = только TECHNICAL и ADMIN.
 ‡ SALES может ставить WAITING_FOR_PHOTOS и, после загрузки фото, READY_FOR_SALE (функция фотографа).
 
 ## Ключевые правила
