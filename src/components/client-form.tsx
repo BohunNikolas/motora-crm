@@ -49,7 +49,7 @@ export function ClientFields({ client }: { client?: Client }) {
           name="notes"
           defaultValue={client?.notes ?? ""}
           className="field"
-          placeholder="Ищет седан до $15 000, готов на трейд-ин"
+          placeholder="Ищет седан до € 15.000, готов на трейд-ин"
         />
       </div>
     </div>

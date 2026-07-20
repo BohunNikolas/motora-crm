@@ -128,12 +128,12 @@ async function main() {
     ]);
 
   const clientData = [
-    ["Андрей Петров", "+7 900 123-45-67", "a.petrov@mail.ru", "BUYER", "Авито", "Ищет седан до $16 000, готов на трейд-ин"],
+    ["Андрей Петров", "+7 900 123-45-67", "a.petrov@mail.ru", "BUYER", "Авито", "Ищет седан до € 16.000, готов на трейд-ин"],
     ["Марина Соколова", "+7 921 555-11-02", null, "SELLER", "Рекомендация", "Продаёт Kia Rio 2017"],
     ["Игорь Ковальчук", "+7 903 777-88-99", "igor.k@gmail.com", "BOTH", "Авто.ру", "Меняет Solaris на кроссовер"],
     ["Елена Дорошенко", "+7 916 234-56-78", "e.dor@yandex.ru", "BUYER", "Сайт", null],
     ["Сергей Мельник", "+7 905 888-12-34", null, "BUYER", "Проходящий", "Смотрел Octavia, думает"],
-    ["Ольга Кравец", "+7 926 445-67-89", "o.kravets@mail.ru", "BUYER", "Авито", "Нужен автомат, бюджет до $12 000"],
+    ["Ольга Кравец", "+7 926 445-67-89", "o.kravets@mail.ru", "BUYER", "Авито", "Нужен автомат, бюджет до € 12.000"],
     ["Дмитрий Волошин", "+7 999 111-22-33", null, "SELLER", "Рекомендация", "Хочет сдать Duster"],
     ["Наталья Гуменюк", "+7 912 777-00-11", "n.gum@gmail.com", "BUYER", "Авто.ру", null],
     ["Виктор Лысенко", "+7 908 333-44-55", null, "BOTH", "Сайт", "Постоянный клиент, третья машина"],
@@ -153,7 +153,7 @@ async function main() {
     p.deal.create({ data: { clientId: alina.id, carId: polo.id, type: "SALE", stage: "NEW", amount: 11800, createdAt: day(-2) } }),
     p.deal.create({ data: { clientId: olga.id, carId: rio.id, type: "SALE", stage: "CONTACT", amount: 9200, notes: "Перезвонить после обеда", createdAt: day(-4) } }),
     p.deal.create({ data: { clientId: sergey.id, carId: octavia.id, type: "SALE", stage: "TEST_DRIVE", amount: 17500, notes: "Тест-драйв в субботу", createdAt: day(-6) } }),
-    p.deal.create({ data: { clientId: natalia.id, carId: mazda.id, type: "SALE", stage: "NEGOTIATION", amount: 12500, notes: "Торгуется, просит скидку $500", createdAt: day(-8) } }),
+    p.deal.create({ data: { clientId: natalia.id, carId: mazda.id, type: "SALE", stage: "NEGOTIATION", amount: 12500, notes: "Торгуется, просит скидку € 500", createdAt: day(-8) } }),
     p.deal.create({ data: { clientId: viktor.id, carId: mazda.id, type: "SALE", stage: "CONTRACT", amount: 13000, notes: "Залог внесён, договор в пятницу", createdAt: day(-3) } }),
     // Трейд-ин в работе
     p.deal.create({ data: { clientId: igor.id, carId: duster.id, type: "TRADE_IN", stage: "CONTACT", amount: 10500, notes: "Меняет Solaris с доплатой", createdAt: day(-5) } }),

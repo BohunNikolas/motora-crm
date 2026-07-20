@@ -1,10 +1,17 @@
-export const fmtMoney = (n: number) => "$" + n.toLocaleString("ru-RU");
+// Валюта CRM — EUR, формат de-AT: «€ 12.500,00». Существующие числа НЕ
+// конвертируются по курсу — просто отображаются как EUR (Требования §3.3).
+const eurFmt = new Intl.NumberFormat("de-AT", { style: "currency", currency: "EUR" });
+export const fmtMoney = (n: number) => eurFmt.format(n);
 
-export const fmtDate = (d: Date | string) =>
-  new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
-
-export const fmtDateFull = (d: Date | string) =>
-  new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+// Даты — DD.MM.YYYY, часовой пояс Europe/Vienna.
+const dateFmt = new Intl.DateTimeFormat("de-AT", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "Europe/Vienna",
+});
+export const fmtDate = (d: Date | string) => dateFmt.format(new Date(d));
+export const fmtDateFull = fmtDate;
 
 // ─── Сроки (единственный источник истины) ───────────────────────
 // Срок задачи — это календарный день, а не момент времени.

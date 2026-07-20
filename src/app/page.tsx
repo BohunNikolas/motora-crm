@@ -101,7 +101,7 @@ export default async function Dashboard() {
             Дашборд
           </h1>
           <p className="mt-1 text-sm text-muted">
-            {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+            {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Vienna" })}
           </p>
         </div>
         <div className="flex gap-2">
@@ -145,7 +145,7 @@ export default async function Dashboard() {
                 <div className="w-[92px] shrink-0 text-[13px] text-muted">{s.label}</div>
                 <div className="h-[26px] flex-1 overflow-hidden rounded-md bg-surface-2">
                   <div
-                    className="h-full rounded-md bg-gradient-to-r from-[rgba(242,163,60,0.25)] to-[rgba(242,163,60,0.55)] transition-all"
+                    className="h-full rounded-md bg-[rgba(246,243,242,0.28)] transition-all"
                     style={{ width: s.count ? `${(s.count / maxCount) * 100}%` : "0%" }}
                   />
                 </div>
