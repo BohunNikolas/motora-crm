@@ -8,10 +8,10 @@ import { internalCode } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewExpensePage({ searchParams }: { searchParams: Promise<{ carId?: string }> }) {
+export default async function NewExpensePage({ searchParams }: { searchParams: Promise<{ carId?: string; warrantyCaseId?: string }> }) {
   const user = await requireUser();
   if (!can(user, "expense.add")) notFound();
-  const { carId } = await searchParams;
+  const { carId, warrantyCaseId } = await searchParams;
 
   const [cars, users] = await Promise.all([
     prisma.car.findMany({ orderBy: [{ make: "asc" }], select: { id: true, make: true, model: true, mhNumber: true, parkingRow: true, parkingSpot: true } }),
@@ -29,6 +29,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
         submitLabel="Создать расход"
         cars={carOptions}
         users={users}
+        warrantyCaseId={warrantyCaseId}
         defaults={{
           title: "", category: "SONSTIGES", amountGross: "", vatRate: "20", supplier: "", invoiceNumber: "",
           invoiceDate: "", paymentDate: "", paymentMethod: "", paymentStatus: "UNPAID", paidAmount: "",

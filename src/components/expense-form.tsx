@@ -39,12 +39,14 @@ export function ExpenseForm({
   submitLabel,
   cars,
   users,
+  warrantyCaseId,
 }: {
   defaults: ExpenseDefaults;
   action: (fd: FormData) => Promise<void>;
   submitLabel: string;
   cars: { id: string; label: string }[];
   users: { id: string; name: string }[];
+  warrantyCaseId?: string;
 }) {
   const [gross, setGross] = useState(defaults.amountGross);
   const [rate, setRate] = useState(defaults.vatRate || "20");
@@ -57,6 +59,7 @@ export function ExpenseForm({
 
   return (
     <form action={action} className="flex flex-col gap-5">
+      {warrantyCaseId && <input type="hidden" name="warrantyCaseId" value={warrantyCaseId} />}
       <section className="panel p-5">
         <h2 className="mb-4 text-[15px] font-bold">Расход</h2>
         <div className="grid grid-cols-4 gap-4">

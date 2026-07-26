@@ -30,18 +30,21 @@ export function TaskForm({
   submitLabel,
   cars,
   users,
+  warrantyCaseId,
 }: {
   defaults: TaskDefaults;
   action: (fd: FormData) => Promise<void>;
   submitLabel: string;
   cars: { id: string; label: string }[];
   users: { id: string; name: string }[];
+  warrantyCaseId?: string;
 }) {
   const [type, setType] = useState(defaults.type || "ALLGEMEIN");
   const isFahrzeug = type === "FAHRZEUG";
 
   return (
     <form action={action} className="flex flex-col gap-5">
+      {warrantyCaseId && <input type="hidden" name="warrantyCaseId" value={warrantyCaseId} />}
       <section className="panel p-5">
         <div className="grid grid-cols-4 gap-4">
           <div className="col-span-2">

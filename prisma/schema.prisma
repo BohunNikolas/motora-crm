@@ -127,6 +127,7 @@ model Car {
   files         CarFile[]
   sales         Sale[]
   appointments  Appointment[]
+  warrantyCases WarrantyCase[]
 }
 
 // Бронь и продажа автомобиля (§18). Единый жизненный цикл: RESERVED → COMPLETED
@@ -245,6 +246,9 @@ model Expense {
   // vehicleId необязателен (§14.1): расход может быть не привязан к авто.
   car    Car?     @relation(fields: [carId], references: [id], onDelete: Cascade)
   carId  String?
+  // Расход может относиться к гарантийному случаю (§19 linkedExpenses).
+  warrantyCase   WarrantyCase? @relation(fields: [warrantyCaseId], references: [id], onDelete: SetNull)
+  warrantyCaseId String?
 }
 
 // ─── Аккаунты и аудит (фаза 2) ─────────────────────────────────
@@ -267,6 +271,7 @@ model User {
   createdTasks  Task[]  @relation("TaskCreator")
   appointmentsAsEmployee Appointment[] @relation("AppointmentEmployee")
   appointmentsCreated    Appointment[] @relation("AppointmentCreator")
+  warrantyCases WarrantyCase[]
 }
 
 model Session {
@@ -306,6 +311,7 @@ model Client {
   tasks     Task[]
   sales     Sale[]
   appointments Appointment[]
+  warrantyCases WarrantyCase[]
 }
 
 model Deal {
@@ -349,6 +355,9 @@ model Task {
   assignedToUserId String?
   createdBy        User?   @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdById      String?
+  // Задача может быть привязана к гарантийному случаю (§19 linkedTasks).
+  warrantyCase     WarrantyCase? @relation(fields: [warrantyCaseId], references: [id], onDelete: SetNull)
+  warrantyCaseId   String?
 
   // Индексы под частые выборки на странице задач (§15.2). Созданы в миграции phase4b.
   @@index([status])
@@ -385,5 +394,39 @@ model Appointment {
 
   @@index([startAt])
   @@index([employeeId])
+  @@index([carId])
+}
+
+// Гарантийный случай (§19). Относится к УЖЕ ПРОДАННОМУ авто (не складской статус);
+// у одного авто может быть несколько случаев. Связан с задачами и расходами.
+model WarrantyCase {
+  id          String   @id @default(cuid())
+  car         Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+  carId       String   // soldVehicleId — проданный автомобиль
+  client      Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId    String?
+  openedAt    DateTime @default(now())
+  clientReportedAt     DateTime?
+  complaintDescription String
+  // OPEN|DIAGNOSIS|REPAIR_APPROVED|IN_REPAIR|WAITING_PARTS|RESOLVED|REJECTED|CLOSED
+  status      String   @default("OPEN")
+  responsible       User?   @relation(fields: [responsibleUserId], references: [id], onDelete: SetNull)
+  responsibleUserId String?
+  workshop    String?  // мастерская / поставщик
+  deadline    DateTime?
+  diagnosis   String?
+  decision    String?
+  communicationNotes String?
+  resolvedAt  DateTime?
+  finalCost   Decimal? @db.Decimal(12, 2)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // §19 linkedTasks / linkedExpenses.
+  tasks    Task[]
+  expenses Expense[]
+
+  @@index([status])
   @@index([carId])
 }

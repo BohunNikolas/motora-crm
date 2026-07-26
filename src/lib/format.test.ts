@@ -21,6 +21,8 @@ import {
   reservationExpired,
   intervalsOverlap,
   viennaDayKey,
+  isWarrantyOpen,
+  WARRANTY_OPEN_STATUSES,
 } from "./format";
 import { Decimal } from "./finance";
 
@@ -361,5 +363,19 @@ describe("Ключ календарного дня в Вене (§16.2)", () => 
   it("поздний вечер UTC уже следующий день в Вене летом", () => {
     // 26.07 22:30 UTC = 27.07 00:30 Вена (CEST +2).
     expect(viennaDayKey(new Date("2026-07-26T22:30:00Z"))).toBe("2026-07-27");
+  });
+});
+
+describe("Открытые гарантийные случаи (§19)", () => {
+  it("в работе — OPEN..WAITING_PARTS, терминальные — нет", () => {
+    expect(isWarrantyOpen("OPEN")).toBe(true);
+    expect(isWarrantyOpen("IN_REPAIR")).toBe(true);
+    expect(isWarrantyOpen("WAITING_PARTS")).toBe(true);
+    expect(isWarrantyOpen("RESOLVED")).toBe(false);
+    expect(isWarrantyOpen("REJECTED")).toBe(false);
+    expect(isWarrantyOpen("CLOSED")).toBe(false);
+  });
+  it("WARRANTY_OPEN_STATUSES — 5 рабочих статусов", () => {
+    expect(WARRANTY_OPEN_STATUSES).toHaveLength(5);
   });
 });

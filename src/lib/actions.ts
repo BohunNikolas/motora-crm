@@ -725,7 +725,8 @@ function expenseDataFromForm(fd: FormData) {
 export async function createExpense(fd: FormData) {
   const user = await requireCan("expense.add");
   const data = expenseDataFromForm(fd);
-  const exp = await prisma.expense.create({ data: { ...data, approvalStatus: "APPROVED", createdById: user.id } });
+  // Привязка к гарантийному случаю (§19) — только при создании из него.
+  const exp = await prisma.expense.create({ data: { ...data, warrantyCaseId: str(fd, "warrantyCaseId"), approvalStatus: "APPROVED", createdById: user.id } });
   await audit(user.id, "Expense", exp.id, "create", {
     after: { title: exp.title, category: exp.category, amountGross: exp.amountGross.toString(), carId: exp.carId },
   });
@@ -924,6 +925,8 @@ export async function createTask(fd: FormData) {
       status,
       completedAt: status === "DONE" ? new Date() : null,
       createdById: user.id,
+      // Привязка к гарантийному случаю (§19) — только при создании из него.
+      warrantyCaseId: str(fd, "warrantyCaseId"),
     },
   });
   await audit(user.id, "Task", task.id, "create", {
@@ -1071,4 +1074,62 @@ export async function setAppointmentStatus(id: string, status: string) {
   await prisma.appointment.update({ where: { id }, data: { status } });
   await audit(user.id, "Appointment", id, "status", { after: { status } });
   revalidatePath("/calendar");
+}
+
+// ─── Гарантийные случаи (§19) ──────────────────────────────────
+
+function warrantyDataFromForm(fd: FormData) {
+  const carId = str(fd, "carId");
+  if (!carId) throw new Error("Выберите проданный автомобиль");
+  return {
+    carId,
+    clientId: str(fd, "clientId"),
+    complaintDescription: str(fd, "complaintDescription") ?? "—",
+    clientReportedAt: date(fd, "clientReportedAt"),
+    responsibleUserId: str(fd, "responsibleUserId"),
+    workshop: str(fd, "workshop"),
+    deadline: date(fd, "deadline"),
+    diagnosis: str(fd, "diagnosis"),
+    decision: str(fd, "decision"),
+    communicationNotes: str(fd, "communicationNotes"),
+    finalCost: money(fd, "finalCost"),
+  };
+}
+
+export async function createWarrantyCase(fd: FormData) {
+  const user = await requireCan("task.manage");
+  const data = warrantyDataFromForm(fd);
+  const wc = await prisma.warrantyCase.create({ data: { ...data, status: "OPEN", createdById: user.id } });
+  await audit(user.id, "WarrantyCase", wc.id, "create", { after: { carId: wc.carId, complaint: wc.complaintDescription } });
+  revalidatePath("/warranty");
+  revalidatePath("/");
+  redirect(`/warranty/${wc.id}`);
+}
+
+export async function updateWarrantyCase(id: string, fd: FormData) {
+  const user = await requireCan("task.manage");
+  const data = warrantyDataFromForm(fd);
+  await prisma.warrantyCase.update({ where: { id }, data });
+  await audit(user.id, "WarrantyCase", id, "update", { after: { complaint: data.complaintDescription } });
+  revalidatePath("/warranty");
+  revalidatePath(`/warranty/${id}`);
+  redirect(`/warranty/${id}`);
+}
+
+/**
+ * Сменить статус случая (§19). При переходе в терминальный (RESOLVED/REJECTED/CLOSED)
+ * фиксируем resolvedAt (если ещё не стоял); при возврате в работу — снимаем.
+ */
+export async function setWarrantyStatus(id: string, status: string) {
+  const user = await requireCan("task.manage");
+  const cur = await prisma.warrantyCase.findUnique({ where: { id }, select: { resolvedAt: true } });
+  const terminal = ["RESOLVED", "REJECTED", "CLOSED"].includes(status);
+  await prisma.warrantyCase.update({
+    where: { id },
+    data: { status, resolvedAt: terminal ? (cur?.resolvedAt ?? new Date()) : null },
+  });
+  await audit(user.id, "WarrantyCase", id, "status", { after: { status } });
+  revalidatePath("/warranty");
+  revalidatePath(`/warranty/${id}`);
+  revalidatePath("/");
 }

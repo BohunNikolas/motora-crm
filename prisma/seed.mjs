@@ -207,12 +207,21 @@ async function main() {
     ],
   });
 
+  // Гарантийные случаи (§19) по проданным авто.
+  await p.warrantyCase.createMany({
+    data: [
+      { carId: focus.id, clientId: igor.id, complaintDescription: "Стук в передней подвеске на неровностях", status: "IN_REPAIR", responsibleUserId: emp?.id, workshop: "Werkstatt Müller", clientReportedAt: day(-4), openedAt: day(-4), deadline: day(3), diagnosis: "Изношены стойки стабилизатора", decision: "Замена по гарантии" },
+      { carId: qashqai.id, clientId: elena.id, complaintDescription: "Ошибка на панели — датчик давления в шинах", status: "RESOLVED", responsibleUserId: emp?.id, clientReportedAt: day(-15), openedAt: day(-15), diagnosis: "Неисправен датчик TPMS", decision: "Датчик заменён", finalCost: 120, resolvedAt: day(-10) },
+    ],
+  });
+
   console.log("Готово:");
   console.log("  авто:    ", await p.car.count());
   console.log("  клиенты: ", await p.client.count());
   console.log("  сделки:  ", await p.deal.count());
   console.log("  задачи:  ", await p.task.count());
   console.log("  термины: ", await p.appointment.count());
+  console.log("  гарантия:", await p.warrantyCase.count());
 }
 
 main()

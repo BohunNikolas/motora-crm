@@ -470,6 +470,23 @@ export const fmtTime = (d: Date | string) => viennaTimeFmt.format(new Date(d));
 /** Дата+время: «26.07.2026 14:30». */
 export const fmtDateTime = (d: Date | string) => `${fmtDate(d)} ${fmtTime(d)}`;
 
+// ─── Гарантийные случаи (§19) ───────────────────────────────────
+
+export const WARRANTY_STATUS: Record<string, { label: string; cls: string }> = {
+  OPEN: { label: "Открыт", cls: "chip-blue" },
+  DIAGNOSIS: { label: "Диагностика", cls: "chip-amber" },
+  REPAIR_APPROVED: { label: "Ремонт одобрен", cls: "chip-blue" },
+  IN_REPAIR: { label: "В ремонте", cls: "chip-amber" },
+  WAITING_PARTS: { label: "Ждём запчасти", cls: "chip-amber" },
+  RESOLVED: { label: "Решён", cls: "chip-green" },
+  REJECTED: { label: "Отклонён", cls: "chip-muted" },
+  CLOSED: { label: "Закрыт", cls: "chip-muted" },
+};
+export const WARRANTY_STATUS_ORDER = Object.keys(WARRANTY_STATUS);
+// Открытые (в работе) случаи — для дашборда «Требует внимания» (§5) и счётчиков.
+export const WARRANTY_OPEN_STATUSES = ["OPEN", "DIAGNOSIS", "REPAIR_APPROVED", "IN_REPAIR", "WAITING_PARTS"];
+export const isWarrantyOpen = (status: string) => WARRANTY_OPEN_STATUSES.includes(status);
+
 export const WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 export const MONTHS_RU = [
   "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
