@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { login } from "@/lib/actions-auth";
+import { SubmitButton } from "@/components/submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,7 @@ export default async function LoginPage({
               className="field"
             />
           </div>
-          <button type="submit" className="btn btn-primary mt-1 w-full">Войти</button>
+          <SubmitButton className="btn btn-primary mt-1 w-full" pendingText="Вход…">Войти</SubmitButton>
         </form>
       </div>
     </div>

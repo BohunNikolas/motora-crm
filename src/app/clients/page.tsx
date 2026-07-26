@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubmitButton } from "@/components/submit-button";
 import { prisma } from "@/lib/prisma";
 import { Cell } from "@/components/cell-link";
 import { requireUser } from "@/lib/auth";
@@ -75,7 +76,7 @@ export default async function ClientsPage({
         </summary>
         <form action={createClient} className="p-5">
           <ClientFields />
-          <button type="submit" className="btn btn-primary mt-4">Добавить</button>
+          <SubmitButton className="btn btn-primary mt-4" pendingText="Сохранение…">Добавить</SubmitButton>
         </form>
       </details>
       )}

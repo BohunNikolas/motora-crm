@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubmitButton } from "@/components/submit-button";
 import type { Car, Prisma } from "@prisma/client";
 import {
   CAR_STATUS,
@@ -316,7 +317,7 @@ export function CarForm({
       </section>
 
       <div className="flex gap-3">
-        <button type="submit" className="btn btn-primary">{submitLabel}</button>
+        <SubmitButton pendingText="Сохранение…">{submitLabel}</SubmitButton>
         <Link href={cancelHref} className="btn btn-ghost">Отмена</Link>
       </div>
     </form>

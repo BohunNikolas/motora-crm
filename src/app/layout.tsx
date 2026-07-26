@@ -4,6 +4,7 @@ import { Nav } from "@/components/nav";
 import { getSessionUser } from "@/lib/auth";
 import { viewerFlags } from "@/lib/authz";
 import { logout } from "@/lib/actions-auth";
+import { SubmitButton } from "@/components/submit-button";
 import { ROLE_LABEL } from "@/lib/format";
 import "./globals.css";
 
@@ -77,12 +78,12 @@ export default async function RootLayout({
                   </div>
                 </a>
                 <form action={logout} className="mt-2.5">
-                  <button
-                    type="submit"
-                    className="text-[12px] font-semibold text-muted transition-colors hover:text-red"
+                  <SubmitButton
+                    className="inline-flex items-center gap-2 text-[12px] font-semibold text-muted transition-colors hover:text-red disabled:opacity-60"
+                    pendingText="Выход…"
                   >
                     Выйти →
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             </aside>

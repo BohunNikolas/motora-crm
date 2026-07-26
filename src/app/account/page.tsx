@@ -1,4 +1,5 @@
 import { requireUser, getMustChangePassword } from "@/lib/auth";
+import { SubmitButton } from "@/components/submit-button";
 import { changePassword } from "@/lib/actions-auth";
 import { ROLE_LABEL } from "@/lib/format";
 
@@ -58,7 +59,7 @@ export default async function AccountPage({
           <label className="label" htmlFor="repeat">Новый пароль ещё раз</label>
           <input id="repeat" name="repeat" type="password" required minLength={10} autoComplete="new-password" className="field" />
         </div>
-        <button type="submit" className="btn btn-primary mt-1">Сменить пароль</button>
+        <SubmitButton className="btn btn-primary mt-1" pendingText="Сохранение…">Сменить пароль</SubmitButton>
       </form>
     </div>
   );

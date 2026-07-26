@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubmitButton } from "@/components/submit-button";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
@@ -31,7 +32,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
           <ClientFields client={client} />
         </section>
         <div className="flex gap-3">
-          <button type="submit" className="btn btn-primary">Сохранить</button>
+          <SubmitButton className="btn btn-primary" pendingText="Сохранение…">Сохранить</SubmitButton>
           <Link href={`/clients/${client.id}`} className="btn btn-ghost">Отмена</Link>
         </div>
       </form>

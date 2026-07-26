@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubmitButton } from "@/components/submit-button";
 
 // Форма гарантийного случая (§19). Статус в форме не задаётся — меняется кнопками
 // на странице случая. Здесь — фактические данные: жалоба, обработка, исполнение.
@@ -108,7 +109,7 @@ export function WarrantyForm({
       </section>
 
       <div className="flex gap-3">
-        <button type="submit" className="btn btn-primary">{submitLabel}</button>
+        <SubmitButton pendingText="Сохранение…">{submitLabel}</SubmitButton>
         <Link href="/warranty" className="btn btn-ghost">Отмена</Link>
       </div>
     </form>

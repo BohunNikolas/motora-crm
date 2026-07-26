@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubmitButton } from "@/components/submit-button";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
@@ -212,7 +213,7 @@ export default async function CarPage({
       {car.minimumSalePriceGross && seeMinPrice && (
         <p className="text-[12px] text-muted">Mindestpreis {fmtMoney(car.minimumSalePriceGross)} — продажа ниже требует override PARTNER/ADMIN.</p>
       )}
-      <button type="submit" className="btn btn-primary">Оформить продажу</button>
+      <SubmitButton className="btn btn-primary" pendingText="Сохранение…">Оформить продажу</SubmitButton>
     </form>
   );
 
@@ -307,7 +308,7 @@ export default async function CarPage({
           </p>
           <div className="flex shrink-0 gap-2">
             <form action={createPickerlTask.bind(null, car.id)}>
-              <button type="submit" className="btn btn-primary !py-1.5">Создать задачу</button>
+              <SubmitButton className="btn btn-primary !py-1.5" pendingText="Сохранение…">Создать задачу</SubmitButton>
             </form>
             <Link href={`/cars/${car.id}`} className="btn btn-ghost !py-1.5">Не сейчас</Link>
           </div>
@@ -355,7 +356,7 @@ export default async function CarPage({
                 <select name="priority" defaultValue="MEDIUM" className="field w-[130px]">
                   {TASK_PRIORITY_ORDER.map((k) => (<option key={k} value={k}>{TASK_PRIORITY[k].label}</option>))}
                 </select>
-                <button type="submit" className="btn btn-primary">Создать</button>
+                <SubmitButton className="btn btn-primary" pendingText="Сохранение…">Создать</SubmitButton>
               </form>
             )}
             {car.tasks.length === 0 ? (
@@ -712,7 +713,7 @@ export default async function CarPage({
                     className="field mono w-[130px] bg-surface"
                     placeholder="250"
                   />
-                  <button type="submit" className="btn btn-primary">Добавить</button>
+                  <SubmitButton className="btn btn-primary" pendingText="Сохранение…">Добавить</SubmitButton>
                 </form>
                 <p className="mt-2.5 text-[12px] text-muted">
                   {can(user, "expense.add")
@@ -905,7 +906,7 @@ export default async function CarPage({
                           </select></label>
                       </div>
                       <input name="reservationComment" className="field" placeholder="Комментарий" />
-                      <button type="submit" className="btn btn-primary">Забронировать</button>
+                      <SubmitButton className="btn btn-primary" pendingText="Сохранение…">Забронировать</SubmitButton>
                     </form>
                   </details>
                   <details className="rounded-xl border border-line bg-surface-2 p-3">

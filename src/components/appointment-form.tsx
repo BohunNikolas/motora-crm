@@ -1,4 +1,5 @@
 "use client";
+import { SubmitButton } from "@/components/submit-button";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -126,7 +127,7 @@ export function AppointmentForm({
       </section>
 
       <div className="flex gap-3">
-        <button type="submit" className="btn btn-primary" disabled={badRange}>{submitLabel}</button>
+        <SubmitButton pendingText="Сохранение…" disabled={badRange}>{submitLabel}</SubmitButton>
         <Link href="/calendar" className="btn btn-ghost">Отмена</Link>
       </div>
     </form>

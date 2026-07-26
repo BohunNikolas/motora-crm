@@ -1,4 +1,5 @@
 "use client";
+import { SubmitButton } from "@/components/submit-button";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -162,7 +163,7 @@ export function ExpenseForm({
       </section>
 
       <div className="flex gap-3">
-        <button type="submit" className="btn btn-primary">{submitLabel}</button>
+        <SubmitButton pendingText="Сохранение…">{submitLabel}</SubmitButton>
         <Link href="/expenses" className="btn btn-ghost">Отмена</Link>
       </div>
     </form>
