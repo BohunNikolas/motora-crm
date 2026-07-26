@@ -4,6 +4,7 @@ import {
   round2,
   dec,
   computeVehicleFinance,
+  splitGrossVat,
   type VehicleFinanceInput,
 } from "./finance";
 
@@ -163,5 +164,29 @@ describe("План/факт (§24.1.7)", () => {
     expect(eur(planned.finalMargin)).toBe("2500.00"); // 13000−10000−500
     expect(eur(actual.finalMargin)).toBe("1666.67");
     expect(planned.finalMargin.gt(actual.finalMargin)).toBe(true);
+  });
+});
+
+describe("Разложение brutto → net/USt (§14.1)", () => {
+  it("gross 360 @ 20% → USt 60, net 300", () => {
+    const { net, vat } = splitGrossVat(360, 20);
+    expect(eur(vat)).toBe("60.00");
+    expect(eur(net)).toBe("300.00");
+  });
+
+  it("gross 100 @ 20% → USt 16.67 (half-up), net 83.33", () => {
+    const { net, vat } = splitGrossVat(100, 20);
+    expect(eur(vat)).toBe("16.67");
+    expect(eur(net)).toBe("83.33");
+  });
+
+  it("ставка 0% → USt 0, net = gross", () => {
+    const { net, vat } = splitGrossVat(500, 0);
+    expect(eur(vat)).toBe("0.00");
+    expect(eur(net)).toBe("500.00");
+  });
+
+  it("ставка по умолчанию 20%", () => {
+    expect(eur(splitGrossVat(120).vat)).toBe("20.00");
   });
 });

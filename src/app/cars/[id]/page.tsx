@@ -74,7 +74,7 @@ export default async function CarPage({
   const car = await prisma.car.findUnique({
     where: { id },
     include: {
-      expenses: { orderBy: { date: "desc" } },
+      expenses: { where: { cancelled: false }, orderBy: { date: "desc" } },
       deals: { include: { client: true }, orderBy: { createdAt: "desc" } },
       parkingMoves: { orderBy: { movedAt: "desc" }, take: 6 },
       files: { orderBy: { createdAt: "asc" } },

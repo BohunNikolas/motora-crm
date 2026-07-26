@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import {
   computeVehicleFinance,
+  splitGrossVat,
   dec,
   round2,
   Decimal,
@@ -78,10 +79,11 @@ export type CarExpenseLike = {
   // Kostenvoranschlag: PENDING-сметы НЕ входят в себестоимость и маржу,
   // пока PARTNER/ADMIN не подтвердит (roles-motorhof.md §2).
   approvalStatus: string;
+  cancelled?: boolean; // отменённый расход (§21) не входит в маржу
 };
 
 const approvedOnly = (expenses: CarExpenseLike[]) =>
-  expenses.filter((e) => e.approvalStatus === "APPROVED");
+  expenses.filter((e) => e.approvalStatus === "APPROVED" && !e.cancelled);
 
 export type CarForFinance = {
   taxScheme: string;
@@ -358,6 +360,45 @@ export const SURCHARGE_BY: Record<string, string> = {
   CLIENT: "Доплачивает клиент",
   MOTORHOF: "Доплачивает MOTORHOF",
 };
+
+// ─── Расходы (§14) ──────────────────────────────────────────────
+
+// Категории §14.2 (немецкие термины). Порядок = группировка в UI.
+export const EXPENSE_CATEGORY: Record<string, string> = {
+  ANKAUF: "Ankauf (закупка)",
+  AUKTION: "Auktion",
+  TRANSPORT: "Transport",
+  WERKSTATT: "Werkstatt (сервис)",
+  ERSATZTEILE: "Ersatzteile (запчасти)",
+  LACKIERUNG: "Lackierung (покраска)",
+  AUFBEREITUNG: "Aufbereitung (предпродажная)",
+  PICKERL: "Pickerl / §57a",
+  GARANTIE: "Garantie / Gewährleistung",
+  MIETE: "Miete (аренда)",
+  WERBUNG: "Werbung (реклама)",
+  SOFTWARE: "Software",
+  VERSICHERUNG: "Versicherung (страховка)",
+  PERSONAL: "Personal (зарплаты)",
+  SONSTIGES: "Sonstiges (прочее)",
+};
+export const EXPENSE_CATEGORY_ORDER = Object.keys(EXPENSE_CATEGORY);
+
+export const EXPENSE_PAYMENT_STATUS: Record<string, { label: string; cls: string }> = {
+  PAID: { label: "Оплачен", cls: "chip-green" },
+  UNPAID: { label: "Не оплачен", cls: "chip-amber" },
+  PARTIALLY_PAID: { label: "Частично", cls: "chip-blue" },
+};
+
+type ExpenseAmountLike = { amountNet: Prisma.Decimal | null; amountGross: Prisma.Decimal; vatRate: number };
+
+/** Netto расхода: сохранённое значение либо расчёт из gross+ставки (legacy без net). */
+export const expenseNet = (e: ExpenseAmountLike): Dec =>
+  e.amountNet != null ? dec(e.amountNet) : splitGrossVat(e.amountGross, e.vatRate).net;
+/** USt расхода = gross − net. */
+export const expenseVat = (e: ExpenseAmountLike): Dec => round2(dec(e.amountGross).minus(expenseNet(e)));
+/** Оплаченная сумма для итогов: PAID → gross, PARTIALLY_PAID → paidAmount, иначе 0. */
+export const expensePaid = (e: { paymentStatus: string; amountGross: Prisma.Decimal; paidAmount: Prisma.Decimal | null }): Dec =>
+  e.paymentStatus === "PAID" ? dec(e.amountGross) : e.paymentStatus === "PARTIALLY_PAID" && e.paidAmount ? dec(e.paidAmount) : new Decimal(0);
 
 // ─── Бронь и продажа (§18) ──────────────────────────────────────
 

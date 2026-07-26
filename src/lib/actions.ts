@@ -33,7 +33,7 @@ async function pickerlAskSuffix(
 }
 import { getSessionUser, audit } from "./auth";
 import { can, type AuthUser, type Capability } from "./authz";
-import { Decimal } from "./finance";
+import { Decimal, splitGrossVat } from "./finance";
 
 /**
  * Обязательная server-side проверка прав в каждой мутации (roles-motorhof.md §1).
@@ -649,12 +649,19 @@ export async function addExpense(carId: string, fd: FormData) {
   // Kostenvoranschlag: у кого нет права прямого расхода (TECHNICAL) — смета PENDING,
   // в маржу попадёт только после подтверждения PARTNER/ADMIN (roles-motorhof.md §2).
   const approvalStatus = can(user, "expense.add") ? "APPROVED" : "PENDING";
+  const gross = money(fd, "amount") ?? "0";
+  const vatRate = 20;
+  const { net } = splitGrossVat(gross, vatRate); // §14.1: net/USt из gross+ставки
   const exp = await prisma.expense.create({
     data: {
       carId,
       title: str(fd, "title") ?? "Расход",
-      amountGross: money(fd, "amount") ?? "0",
+      amountGross: gross,
+      amountNet: net.toString(),
+      vatRate,
+      category: str(fd, "category") ?? "WERKSTATT",
       approvalStatus,
+      createdById: user.id,
     },
   });
   await audit(user.id, "Expense", exp.id, "create", {
@@ -662,7 +669,72 @@ export async function addExpense(carId: string, fd: FormData) {
   });
   revalidatePath(`/cars/${carId}`);
   revalidatePath("/cars");
+  revalidatePath("/expenses");
   revalidatePath("/");
+}
+
+// ─── Расходы: полная модель (§14) ──────────────────────────────
+
+/** Сбор данных расхода из формы страницы «Расходы»; net/USt считаются из gross+ставки. */
+function expenseDataFromForm(fd: FormData) {
+  const gross = money(fd, "amountGross") ?? "0";
+  const vatRate = num(fd, "vatRate") ?? 20;
+  const { net } = splitGrossVat(gross, vatRate);
+  const paymentStatus = str(fd, "paymentStatus") ?? "UNPAID";
+  return {
+    title: str(fd, "title") ?? "Расход",
+    category: str(fd, "category") ?? "SONSTIGES",
+    amountGross: gross,
+    amountNet: net.toString(),
+    vatRate,
+    supplier: str(fd, "supplier"),
+    invoiceNumber: str(fd, "invoiceNumber"),
+    invoiceDate: date(fd, "invoiceDate"),
+    paymentDate: date(fd, "paymentDate"),
+    paymentMethod: str(fd, "paymentMethod"),
+    paymentStatus,
+    // Оплачено полностью → paidAmount = gross; частично → из формы; не оплачено → null.
+    paidAmount:
+      paymentStatus === "PAID" ? gross : paymentStatus === "PARTIALLY_PAID" ? money(fd, "paidAmount") : null,
+    ownerCompany: str(fd, "ownerCompany"),
+    responsibleUserId: str(fd, "responsibleUserId"),
+    comment: str(fd, "comment"),
+    carId: str(fd, "carId"),
+    alreadyIncludedInAcquisitionCost: str(fd, "alreadyIncludedInAcquisitionCost") === "1",
+  };
+}
+
+export async function createExpense(fd: FormData) {
+  const user = await requireCan("expense.add");
+  const data = expenseDataFromForm(fd);
+  const exp = await prisma.expense.create({ data: { ...data, approvalStatus: "APPROVED", createdById: user.id } });
+  await audit(user.id, "Expense", exp.id, "create", {
+    after: { title: exp.title, category: exp.category, amountGross: exp.amountGross.toString(), carId: exp.carId },
+  });
+  revalidateAll();
+  revalidatePath("/expenses");
+  redirect("/expenses");
+}
+
+export async function updateExpense(id: string, fd: FormData) {
+  const user = await requireCan("expense.add");
+  const data = expenseDataFromForm(fd);
+  await prisma.expense.update({ where: { id }, data });
+  await audit(user.id, "Expense", id, "update", { after: { title: data.title, amountGross: data.amountGross } });
+  revalidateAll();
+  revalidatePath("/expenses");
+  if (data.carId) revalidatePath(`/cars/${data.carId}`);
+  redirect("/expenses");
+}
+
+/** Отмена расхода — soft (§21): помечаем cancelled, физически не удаляем. */
+export async function cancelExpense(id: string) {
+  const user = await requireCan("expense.add");
+  const exp = await prisma.expense.update({ where: { id }, data: { cancelled: true } });
+  await audit(user.id, "Expense", id, "cancel", { before: { title: exp.title, amountGross: exp.amountGross.toString() } });
+  revalidateAll();
+  revalidatePath("/expenses");
+  if (exp.carId) revalidatePath(`/cars/${exp.carId}`);
 }
 
 export async function approveExpense(id: string, carId: string) {

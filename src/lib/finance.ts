@@ -79,6 +79,16 @@ export function differenzUst(
   return round2(diff.times(vatRate).div(100 + vatRate));
 }
 
+/**
+ * Разложение brutto-суммы на netto и USt по ставке (§14.1): при вводе gross+vatRate
+ * автоматически считаются net и USt. USt = gross × rate/(100+rate), net = gross − USt.
+ */
+export function splitGrossVat(amountGross: Money, vatRate: number = VAT_RATE_DEFAULT): { net: Dec; vat: Dec } {
+  const gross = dec(amountGross);
+  const vat = round2(gross.times(vatRate).div(100 + vatRate));
+  return { net: round2(gross.minus(vat)), vat };
+}
+
 /** Сумма расходов, не включённых в стоимость приобретения (brutto). */
 function additionalExpensesGross(expenses: FinanceExpense[] = []): Dec {
   return expenses

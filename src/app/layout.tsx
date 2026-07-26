@@ -68,7 +68,7 @@ export default async function RootLayout({
                   </div>
                 </div>
               </div>
-              <Nav showDeals={flags.seeDeals} />
+              <Nav showDeals={flags.seeDeals} showExpenses={flags.seeAcquisition} />
               <div className="mt-auto border-t border-line px-2 pt-4">
                 <a href="/account" className="block hover:opacity-80">
                   <div className="truncate text-[13px] font-semibold">{user.name}</div>

@@ -45,6 +45,15 @@ const ITEMS = [
     ),
   },
   {
+    href: "/expenses",
+    label: "Расходы",
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /><path d="M6 15h4" />
+      </svg>
+    ),
+  },
+  {
     href: "/tasks",
     label: "Задачи",
     icon: (
@@ -55,9 +64,11 @@ const ITEMS = [
   },
 ];
 
-export function Nav({ showDeals = true }: { showDeals?: boolean }) {
+export function Nav({ showDeals = true, showExpenses = true }: { showDeals?: boolean; showExpenses?: boolean }) {
   const pathname = usePathname();
-  const items = ITEMS.filter((i) => showDeals || i.href !== "/deals");
+  const items = ITEMS.filter(
+    (i) => (showDeals || i.href !== "/deals") && (showExpenses || i.href !== "/expenses")
+  );
   return (
     <nav className="flex flex-col gap-1">
       {items.map((item) => {
