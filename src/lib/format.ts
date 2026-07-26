@@ -274,7 +274,6 @@ export function buildSaleSnapshot(car: CarForFinance, salePriceGross: Num): Sale
 
 export const TRANSMISSIONS = ["АКПП", "МКПП", "Робот", "Вариатор"];
 export const FUELS = ["Бензин", "Дизель", "Гибрид", "Электро", "Газ/бензин"];
-export const SOURCES = ["Авито", "Авто.ру", "Рекомендация", "Сайт", "Проходящий", "Другое"];
 
 // 8 складских статусов (§6.1). Порядок = жизненный цикл авто.
 export const CAR_STATUS: Record<string, { label: string; cls: string }> = {
@@ -328,6 +327,20 @@ export const CLIENT_TYPE: Record<string, string> = {
   SELLER: "Продавец",
   BOTH: "Покупатель и продавец",
 };
+
+// Источники обращения под Австрию (§17). Хранится ключ; старые клиенты могут
+// иметь произвольный текст (legacy) — показываем его как есть.
+export const CLIENT_SOURCE: Record<string, string> = {
+  WILLHABEN: "Willhaben",
+  AUTOSCOUT24: "AutoScout24",
+  WEBSITE: "Website",
+  EMPFEHLUNG: "Empfehlung (рекомендация)",
+  LAUFKUNDSCHAFT: "Laufkundschaft (проходящий)",
+  SOCIAL_MEDIA: "Social Media",
+  SONSTIGES: "Sonstiges (прочее)",
+};
+export const clientSourceLabel = (source: string | null | undefined) =>
+  source ? (CLIENT_SOURCE[source] ?? source) : "—";
 
 export const DEAL_TYPE: Record<string, string> = {
   SALE: "Продажа",

@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { viewerFlags } from "@/lib/authz";
 import { ClientFields } from "@/components/client-form";
 import { createClient } from "@/lib/actions";
-import { fmtDate, CLIENT_TYPE } from "@/lib/format";
+import { fmtDate, CLIENT_TYPE, clientSourceLabel } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +24,10 @@ export default async function ClientsPage({
   const user = await requireUser();
   const flags = viewerFlags(user);
 
+  // §17: показываем связи по Sale/Appointment, а не по Deal.
   const all = await prisma.client.findMany({
     where: type && CLIENT_TYPE[type] ? { type } : undefined,
-    include: { _count: { select: { deals: true } } },
+    include: { _count: { select: { sales: true, appointments: true } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -118,7 +119,7 @@ export default async function ClientsPage({
                   <th>Телефон</th>
                   <th>Тип</th>
                   <th>Источник</th>
-                  <th className="text-right">Сделок</th>
+                  <th className="text-right">Авто / термины</th>
                   <th className="text-right">Добавлен</th>
                   <th />
                 </tr>
@@ -146,10 +147,10 @@ export default async function ClientsPage({
                         </span>
                       </Cell>
                       <Cell href={href} className="text-[13px] text-muted">
-                        {c.source ?? "—"}
+                        {clientSourceLabel(c.source)}
                       </Cell>
-                      <Cell href={href} className="mono text-right">
-                        {c._count.deals || "—"}
+                      <Cell href={href} className="mono text-right text-[13px]">
+                        {c._count.sales || "—"} / {c._count.appointments || "—"}
                       </Cell>
                       <Cell href={href} className="text-right text-[13px] text-muted">
                         {fmtDate(c.createdAt)}

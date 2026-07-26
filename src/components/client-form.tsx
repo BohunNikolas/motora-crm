@@ -1,5 +1,5 @@
 import type { Client } from "@prisma/client";
-import { CLIENT_TYPE, SOURCES } from "@/lib/format";
+import { CLIENT_TYPE, CLIENT_SOURCE } from "@/lib/format";
 
 /** Поля клиента. Используется и в инлайн-форме на /clients, и на странице редактирования. */
 export function ClientFields({ client }: { client?: Client }) {
@@ -37,9 +37,13 @@ export function ClientFields({ client }: { client?: Client }) {
         <label className="label" htmlFor="source">Источник</label>
         <select id="source" name="source" defaultValue={client?.source ?? ""} className="field">
           <option value="">—</option>
-          {SOURCES.map((s) => (
-            <option key={s} value={s}>{s}</option>
+          {Object.entries(CLIENT_SOURCE).map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
           ))}
+          {/* Старое произвольное значение источника — не терять при редактировании. */}
+          {client?.source && !CLIENT_SOURCE[client.source] && (
+            <option value={client.source}>{client.source} (старое)</option>
+          )}
         </select>
       </div>
       <div className="col-span-3">

@@ -49,6 +49,9 @@ const lastMonth = () => {
 
 async function main() {
   // Порядок важен: сначала зависимые сущности
+  await p.appointment.deleteMany();
+  await p.warrantyCase.deleteMany();
+  await p.sale.deleteMany();
   await p.task.deleteMany();
   await p.deal.deleteMany();
   await p.expense.deleteMany();
@@ -133,16 +136,16 @@ async function main() {
     ]);
 
   const clientData = [
-    ["Андрей Петров", "+7 900 123-45-67", "a.petrov@mail.ru", "BUYER", "Авито", "Ищет седан до € 16.000, готов на трейд-ин"],
-    ["Марина Соколова", "+7 921 555-11-02", null, "SELLER", "Рекомендация", "Продаёт Kia Rio 2017"],
-    ["Игорь Ковальчук", "+7 903 777-88-99", "igor.k@gmail.com", "BOTH", "Авто.ру", "Меняет Solaris на кроссовер"],
-    ["Елена Дорошенко", "+7 916 234-56-78", "e.dor@yandex.ru", "BUYER", "Сайт", null],
-    ["Сергей Мельник", "+7 905 888-12-34", null, "BUYER", "Проходящий", "Смотрел Octavia, думает"],
-    ["Ольга Кравец", "+7 926 445-67-89", "o.kravets@mail.ru", "BUYER", "Авито", "Нужен автомат, бюджет до € 12.000"],
-    ["Дмитрий Волошин", "+7 999 111-22-33", null, "SELLER", "Рекомендация", "Хочет сдать Duster"],
-    ["Наталья Гуменюк", "+7 912 777-00-11", "n.gum@gmail.com", "BUYER", "Авто.ру", null],
-    ["Виктор Лысенко", "+7 908 333-44-55", null, "BOTH", "Сайт", "Постоянный клиент, третья машина"],
-    ["Алина Шевчук", "+7 967 222-99-88", "alina.sh@mail.ru", "BUYER", "Другое", "Пришла по рекламе в Телеграме"],
+    ["Андрей Петров", "+7 900 123-45-67", "a.petrov@mail.ru", "BUYER", "WILLHABEN", "Ищет седан до € 16.000, готов на трейд-ин"],
+    ["Марина Соколова", "+7 921 555-11-02", null, "SELLER", "EMPFEHLUNG", "Продаёт Kia Rio 2017"],
+    ["Игорь Ковальчук", "+7 903 777-88-99", "igor.k@gmail.com", "BOTH", "AUTOSCOUT24", "Меняет Solaris на кроссовер"],
+    ["Елена Дорошенко", "+7 916 234-56-78", "e.dor@yandex.ru", "BUYER", "WEBSITE", null],
+    ["Сергей Мельник", "+7 905 888-12-34", null, "BUYER", "LAUFKUNDSCHAFT", "Смотрел Octavia, думает"],
+    ["Ольга Кравец", "+7 926 445-67-89", "o.kravets@mail.ru", "BUYER", "WILLHABEN", "Нужен автомат, бюджет до € 12.000"],
+    ["Дмитрий Волошин", "+7 999 111-22-33", null, "SELLER", "EMPFEHLUNG", "Хочет сдать Duster"],
+    ["Наталья Гуменюк", "+7 912 777-00-11", "n.gum@gmail.com", "BUYER", "AUTOSCOUT24", null],
+    ["Виктор Лысенко", "+7 908 333-44-55", null, "BOTH", "WEBSITE", "Постоянный клиент, третья машина"],
+    ["Алина Шевчук", "+7 967 222-99-88", "alina.sh@mail.ru", "BUYER", "SOCIAL_MEDIA", "Пришла по рекламе в Телеграме"],
   ];
 
   const clients = await Promise.all(
@@ -151,6 +154,17 @@ async function main() {
     )
   );
   const [andrey, marina, igor, elena, sergey, olga, dmitry, natalia, viktor, alina] = clients;
+
+  // Продажи (§18, источник истины по продажам/маржа). Проданные авто связываем
+  // с покупателями; бронь — RESERVED. financialSnapshot замораживает маржу.
+  const emp = await p.user.findFirst({ where: { active: true } });
+  const snap = (gross, margin, scheme = "DIFFERENZBESTEUERUNG") => ({ salePriceGross: gross, finalMargin: margin, taxScheme: scheme });
+  await Promise.all([
+    p.sale.create({ data: { carId: qashqai.id, clientId: elena.id, stage: "COMPLETED", saleDate: day(-5), actualSalePriceGross: 14200, paymentStatus: "PAID", paymentMethod: "TRANSFER", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(14200, 2416.67) } }),
+    p.sale.create({ data: { carId: rav4.id, clientId: natalia.id, stage: "COMPLETED", saleDate: day(-3), actualSalePriceGross: 19000, paymentStatus: "PAID", paymentMethod: "FINANCING", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(19000, 2916.67) } }),
+    p.sale.create({ data: { carId: focus.id, clientId: igor.id, stage: "COMPLETED", saleDate: lastMonth(), actualSalePriceGross: 8000, paymentStatus: "PAID", paymentMethod: "CASH", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(8000, 1483.33) } }),
+    p.sale.create({ data: { carId: mazda.id, clientId: viktor.id, stage: "RESERVED", reservedAt: day(-2), reservationExpiresAt: day(3), anzahlung: 500, reservationPaymentMethod: "CASH", reservationComment: "Залог внесён, ждёт одобрения кредита" } }),
+  ]);
 
   await Promise.all([
     // ── В работе: по одной-две на каждом этапе воронки ──
@@ -196,7 +210,6 @@ async function main() {
 
   // Термины календаря (§16). Время — «настенное» на ближайшие дни.
   const at = (offset, hh, mm) => { const d = new Date(); d.setHours(hh, mm, 0, 0); d.setDate(d.getDate() + offset); return d; };
-  const emp = await p.user.findFirst({ where: { active: true } });
   await p.appointment.createMany({
     data: [
       { clientName: andrey.name, phone: andrey.phone, clientId: andrey.id, carId: camry.id, employeeId: emp?.id, startAt: at(0, 10, 0), endAt: at(0, 10, 30), type: "BESICHTIGUNG", status: "BESTAETIGT" },
