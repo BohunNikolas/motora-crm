@@ -4,6 +4,9 @@ import { Cell } from "@/components/cell-link";
 import { requireUser } from "@/lib/auth";
 import { viewerFlags } from "@/lib/authz";
 import { fmtMoney, sumMoney, carCost, carMargin, mhCode, internalCode, carAttention, nowMs, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
+import { Pagination } from "@/components/pagination";
+
+const PAGE_SIZE = 25;
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +23,9 @@ const ATTENTION_LABEL: Record<string, string> = {
 export default async function CarsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; attention?: string; stock?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; attention?: string; stock?: string; page?: string }>;
 }) {
-  const { q, status, attention, stock } = await searchParams;
+  const { q, status, attention, stock, page: pageParam } = await searchParams;
   const user = await requireUser();
   const flags = viewerFlags(user);
 
@@ -77,6 +80,11 @@ export default async function CarsPage({
 
   const totalCost = sumMoney(cars.map((c) => carCost(c)));
   const totalMargin = sumMoney(cars.map((c) => carMargin(c)));
+
+  // Пагинация (§23): в DOM — только текущая страница.
+  const totalPages = Math.max(1, Math.ceil(cars.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, Number(pageParam) || 1), totalPages);
+  const pageCars = cars.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const linkFor = (s?: string) => {
     const p = new URLSearchParams();
@@ -175,7 +183,7 @@ export default async function CarsPage({
                 </tr>
               </thead>
               <tbody>
-                {cars.map((c) => {
+                {pageCars.map((c) => {
                   const expenses = sumMoney(c.expenses.map((e) => e.amountGross));
                   const margin = carMargin(c);
                   const href = `/cars/${c.id}`;
@@ -250,6 +258,7 @@ export default async function CarsPage({
           </div>
         )}
       </div>
+      <Pagination page={page} totalPages={totalPages} basePath="/cars" params={{ q, status, attention, stock }} />
     </div>
   );
 }

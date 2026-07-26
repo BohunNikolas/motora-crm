@@ -383,7 +383,7 @@ describe("Открытые гарантийные случаи (§19)", () => {
 
 describe("Возраст авто на складе (§5.5)", () => {
   const NOW = new Date("2026-07-26T12:00:00").getTime();
-  const base = (o) => ({ arrivalDate: null, purchaseDate: null, createdAt: new Date("2026-07-26T12:00:00"), ...o });
+  const base = (o: { arrivalDate?: Date | null; purchaseDate?: Date | null }) => ({ arrivalDate: null, purchaseDate: null, createdAt: new Date("2026-07-26T12:00:00"), ...o });
   it("считает от arrivalDate в первую очередь", () => {
     expect(carAgeDays(base({ arrivalDate: new Date("2026-06-26T12:00:00"), purchaseDate: new Date("2026-01-01") }), NOW)).toBe(30);
   });

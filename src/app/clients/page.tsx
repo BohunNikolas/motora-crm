@@ -6,6 +6,9 @@ import { viewerFlags } from "@/lib/authz";
 import { ClientFields } from "@/components/client-form";
 import { createClient } from "@/lib/actions";
 import { fmtDate, CLIENT_TYPE, clientSourceLabel } from "@/lib/format";
+import { Pagination } from "@/components/pagination";
+
+const PAGE_SIZE = 25;
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +21,9 @@ const TYPE_CLS: Record<string, string> = {
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; page?: string }>;
 }) {
-  const { q, type } = await searchParams;
+  const { q, type, page: pageParam } = await searchParams;
   const user = await requireUser();
   const flags = viewerFlags(user);
 
@@ -38,6 +41,10 @@ export default async function ClientsPage({
         [c.name, c.phone, c.email ?? ""].some((f) => f.toLowerCase().includes(needle))
       )
     : all;
+
+  const totalPages = Math.max(1, Math.ceil(clients.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, Number(pageParam) || 1), totalPages);
+  const pageClients = clients.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const counts = await prisma.client.groupBy({ by: ["type"], _count: true });
   const countOf = (t: string) => counts.find((c) => c.type === t)?._count ?? 0;
@@ -125,7 +132,7 @@ export default async function ClientsPage({
                 </tr>
               </thead>
               <tbody>
-                {clients.map((c) => {
+                {pageClients.map((c) => {
                   const href = `/clients/${c.id}`;
                   return (
                     <tr key={c.id}>
@@ -177,6 +184,7 @@ export default async function ClientsPage({
           </div>
         )}
       </div>
+      <Pagination page={page} totalPages={totalPages} basePath="/clients" params={{ q, type }} />
     </div>
   );
 }

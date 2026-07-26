@@ -7,10 +7,12 @@ import {
   fmtDate, internalCode, isWarrantyOpen,
   WARRANTY_STATUS, WARRANTY_STATUS_ORDER, WARRANTY_OPEN_STATUSES,
 } from "@/lib/format";
+import { Pagination } from "@/components/pagination";
 
 export const dynamic = "force-dynamic";
 
 type SP = Record<string, string | undefined>;
+const PAGE_SIZE = 25;
 
 export default async function WarrantyPage({ searchParams }: { searchParams: Promise<SP> }) {
   const user = await requireUser();
@@ -38,6 +40,10 @@ export default async function WarrantyPage({ searchParams }: { searchParams: Pro
     prisma.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.car.findMany({ where: { status: "SOLD" }, orderBy: [{ make: "asc" }], select: { id: true, make: true, model: true, mhNumber: true, parkingRow: true, parkingSpot: true } }),
   ]);
+
+  const totalPages = Math.max(1, Math.ceil(cases.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, Number(sp.page) || 1), totalPages);
+  const pageCases = cases.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const link = (over: SP) => {
     const p = new URLSearchParams();
@@ -96,7 +102,7 @@ export default async function WarrantyPage({ searchParams }: { searchParams: Pro
               <th className="text-left">Клиент</th><th className="text-left">Ответственный</th><th className="text-left">Задачи/Расходы</th><th className="text-left">Статус</th>
             </tr></thead>
             <tbody>
-              {cases.map((wc) => {
+              {pageCases.map((wc) => {
                 const st = WARRANTY_STATUS[wc.status];
                 return (
                   <tr key={wc.id}>
@@ -114,6 +120,7 @@ export default async function WarrantyPage({ searchParams }: { searchParams: Pro
           </table>
         )}
       </div>
+      <Pagination page={page} totalPages={totalPages} basePath="/warranty" params={{ status: sp.status, open: sp.open, responsibleUserId: sp.responsibleUserId, carId: sp.carId }} />
     </div>
   );
 }

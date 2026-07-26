@@ -19,10 +19,12 @@ import {
   expensePaid,
 } from "@/lib/format";
 import { Prisma } from "@prisma/client";
+import { Pagination } from "@/components/pagination";
 
 export const dynamic = "force-dynamic";
 
 type SP = Record<string, string | undefined>;
+const PAGE_SIZE = 25;
 
 // Границы месяца YYYY-MM → [начало, начало след. месяца).
 function monthRange(ym?: string): { gte: Date; lt: Date } | null {
@@ -69,6 +71,11 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   const totalVat = sumMoney(expenses.map((e) => expenseVat(e)));
   const totalPaid = sumMoney(expenses.map((e) => expensePaid(e)));
   const totalUnpaid = totalGross.minus(totalPaid);
+
+  // Пагинация (§23). Итоги — по всей выборке, в таблице — текущая страница.
+  const totalPages = Math.max(1, Math.ceil(expenses.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, Number(sp.page) || 1), totalPages);
+  const pageExpenses = expenses.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const qs = new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]).toString();
   const carLabel = (c: { mhNumber: number; parkingRow: string | null; parkingSpot: number | null } | null, make?: string, model?: string) =>
@@ -162,7 +169,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
             </tr>
           </thead>
           <tbody>
-            {expenses.map((e) => {
+            {pageExpenses.map((e) => {
               return (
                 <tr key={e.id}>
                   <td className="whitespace-nowrap text-muted">{fmtDate(e.date)}</td>
@@ -194,6 +201,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
           </tbody>
         </table>
       </div>
+      <Pagination page={page} totalPages={totalPages} basePath="/expenses" params={sp} />
     </div>
   );
 }
