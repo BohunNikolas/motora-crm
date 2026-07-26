@@ -24,7 +24,7 @@ const jbmono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MOTORHOF — CRM автосалона",
+  title: "MOTORHOF — CRM",
   description: "Учёт автомобилей, клиентов и сделок для салона б/у автомобилей",
 };
 
@@ -64,7 +64,7 @@ export default async function RootLayout({
                     MOTORHOF
                   </div>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-                    CRM автосалона
+                    CRM
                   </div>
                 </div>
               </div>

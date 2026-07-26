@@ -28,7 +28,7 @@ export default async function LoginPage({
               MOTORHOF
             </div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-              CRM автосалона
+              CRM
             </div>
           </div>
         </div>
