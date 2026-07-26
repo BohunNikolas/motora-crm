@@ -7,7 +7,7 @@ export function ClientFields({ client }: { client?: Client }) {
     <div className="grid grid-cols-4 gap-4">
       <div>
         <label className="label" htmlFor="name">Имя *</label>
-        <input id="name" name="name" required defaultValue={client?.name} className="field" placeholder="Андрей Петров" />
+        <input id="name" name="name" required defaultValue={client?.name} className="field" placeholder="Thomas Gruber" />
       </div>
       <div>
         <label className="label" htmlFor="phone">Телефон *</label>
@@ -18,12 +18,12 @@ export function ClientFields({ client }: { client?: Client }) {
           required
           defaultValue={client?.phone}
           className="field mono"
-          placeholder="+7 900 123-45-67"
+          placeholder="+43 664 123 45 67"
         />
       </div>
       <div>
         <label className="label" htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" defaultValue={client?.email ?? ""} className="field" placeholder="a.petrov@mail.ru" />
+        <input id="email" name="email" type="email" defaultValue={client?.email ?? ""} className="field" placeholder="t.gruber@gmx.at" />
       </div>
       <div>
         <label className="label" htmlFor="type">Тип</label>

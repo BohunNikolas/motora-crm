@@ -50,11 +50,11 @@ export function CarForm({
         <div className="grid grid-cols-4 gap-4">
           <div>
             <label className="label" htmlFor="make">Marke *</label>
-            <input id="make" name="make" required defaultValue={car?.make} className="field" placeholder="Toyota" />
+            <input id="make" name="make" required defaultValue={car?.make} className="field" placeholder="Volkswagen" />
           </div>
           <div>
             <label className="label" htmlFor="model">Modell *</label>
-            <input id="model" name="model" required defaultValue={car?.model} className="field" placeholder="Camry" />
+            <input id="model" name="model" required defaultValue={car?.model} className="field" placeholder="Golf" />
           </div>
           <div>
             <label className="label" htmlFor="year">Год *</label>
@@ -67,7 +67,7 @@ export function CarForm({
 
           <div className="col-span-2">
             <label className="label" htmlFor="vin">VIN</label>
-            <input id="vin" name="vin" defaultValue={car?.vin ?? ""} className="field mono uppercase" placeholder="JTNBE46K473012345" />
+            <input id="vin" name="vin" defaultValue={car?.vin ?? ""} className="field mono uppercase" placeholder="WVWZZZ1KZAW123456" />
           </div>
           <div>
             <label className="label" htmlFor="mileage">Kilometerstand *</label>

@@ -1,10 +1,11 @@
 /**
- * Тестовые данные MOTORA CRM.
+ * Тестовые данные MOTORHOF CRM (автосалон в Австрии).
  * Запуск: npm run seed  (полностью перезаписывает базу)
  *
- * Набор специально содержит граничные случаи, на которых врут отчёты:
- *  - продажа, закрытая в ПРОШЛОМ месяце → не должна попасть в выручку месяца
- *  - закупка (PURCHASE), закрытая в этом месяце → не выручка, это расход
+ * Данные подобраны под австрийский рынок: популярные модели, телефоны +43,
+ * источники Willhaben/AutoScout24. Набор содержит граничные случаи для отчётов:
+ *  - продажа в ПРОШЛОМ месяце → не в выручке текущего
+ *  - закупка (PURCHASE) в этом месяце → не выручка, это расход
  *  - закрытая сделка без суммы → маржа не считается
  *  - потерянные сделки → не в работе и не в выручке
  */
@@ -66,86 +67,88 @@ async function main() {
       },
     });
 
-  const [camry, rio, solaris, polo, mazda, octavia, duster, qashqai, rav4, focus] =
+  // Австрийский топ б/у: Golf, Octavia, Tiguan, A4, 3er, Polo, Astra, Clio, Fabia, Focus.
+  const [golf, fabia, astra, polo, a4, octavia, clio, tiguan, bmw, focus] =
     await Promise.all([
       car(
-        { make: "Toyota", model: "Camry", year: 2019, mileage: 92000, vin: "JTNBE46K473012345",
-          color: "Чёрный", transmission: "АКПП", fuel: "Бензин", engineVol: 2.5,
-          purchasePrice: 12000, listPrice: 15500, status: "READY_FOR_SALE",
-          notes: "Один владелец, сервисная книжка." },
+        { make: "Volkswagen", model: "Golf", year: 2019, mileage: 78000, vin: "WVWZZZ1KZAW123456",
+          color: "Серый", transmission: "МКПП", fuel: "Дизель", engineVol: 2.0,
+          purchasePrice: 16500, listPrice: 19900, status: "READY_FOR_SALE",
+          notes: "Один владелец, сервисная книжка полная." },
         [{ title: "Замена колодок", amount: 250 }, { title: "Химчистка салона", amount: 180 }]
       ),
       car(
-        { make: "Kia", model: "Rio", year: 2017, mileage: 78000, color: "Белый",
-          transmission: "МКПП", fuel: "Бензин", engineVol: 1.6,
-          purchasePrice: 7000, listPrice: 9200, status: "READY_FOR_SALE" },
+        { make: "Skoda", model: "Fabia", year: 2018, mileage: 64000, color: "Белый",
+          transmission: "МКПП", fuel: "Бензин", engineVol: 1.0,
+          purchasePrice: 9500, listPrice: 12200, status: "READY_FOR_SALE" },
         [{ title: "Полировка кузова", amount: 150 }]
       ),
       car(
-        { make: "Hyundai", model: "Solaris", year: 2018, mileage: 64000, color: "Серебристый",
-          transmission: "АКПП", fuel: "Бензин", engineVol: 1.6,
-          purchasePrice: 8000, listPrice: 10500, status: "IN_PREPARATION",
+        { make: "Opel", model: "Astra", year: 2018, mileage: 89000, color: "Серебристый",
+          transmission: "АКПП", fuel: "Дизель", engineVol: 1.6,
+          purchasePrice: 11000, listPrice: 13900, status: "IN_PREPARATION",
           notes: "Ждём стойки, потом на мойку." },
         [{ title: "Замена стоек", amount: 320 }, { title: "Развал-схождение", amount: 90 }]
       ),
       car(
-        { make: "Volkswagen", model: "Polo", year: 2019, mileage: 55000, color: "Синий",
-          transmission: "АКПП", fuel: "Бензин", engineVol: 1.6,
-          purchasePrice: 9000, listPrice: 11800, status: "READY_FOR_SALE" }
+        { make: "Volkswagen", model: "Polo", year: 2019, mileage: 52000, color: "Синий",
+          transmission: "АКПП", fuel: "Бензин", engineVol: 1.0,
+          purchasePrice: 11000, listPrice: 13800, status: "READY_FOR_SALE" }
       ),
       car(
-        { make: "Mazda", model: "6", year: 2016, mileage: 110000, color: "Красный",
-          transmission: "АКПП", fuel: "Бензин", engineVol: 2.0,
-          purchasePrice: 10000, listPrice: 13000, status: "RESERVED",
+        { make: "Audi", model: "A4 Avant", year: 2017, mileage: 112000, color: "Чёрный",
+          transmission: "АКПП", fuel: "Дизель", engineVol: 2.0,
+          purchasePrice: 18000, listPrice: 22500, status: "RESERVED",
           notes: "Бронь до пятницы, залог внесён." },
         [{ title: "Ремонт кондиционера", amount: 400 }]
       ),
       car(
         { make: "Skoda", model: "Octavia", year: 2020, mileage: 41000, color: "Серый",
           transmission: "Робот", fuel: "Дизель", engineVol: 2.0,
-          purchasePrice: 14000, listPrice: 17500, status: "READY_FOR_SALE" },
+          purchasePrice: 17000, listPrice: 20900, status: "READY_FOR_SALE" },
         [{ title: "Замена масла и фильтров", amount: 260 }]
       ),
       car(
-        { make: "Renault", model: "Duster", year: 2018, mileage: 87000, color: "Оранжевый",
-          transmission: "МКПП", fuel: "Бензин", engineVol: 2.0,
-          purchasePrice: 8500, listPrice: 11000, status: "IN_PREPARATION" },
+        { make: "Renault", model: "Clio", year: 2018, mileage: 71000, color: "Красный",
+          transmission: "МКПП", fuel: "Бензин", engineVol: 0.9,
+          purchasePrice: 8500, listPrice: 10900, status: "IN_PREPARATION" },
         [{ title: "Химчистка", amount: 180 }]
       ),
       // Продан в этом месяце
       car(
-        { make: "Nissan", model: "Qashqai", year: 2017, mileage: 95000, color: "Белый",
-          transmission: "Вариатор", fuel: "Бензин", engineVol: 2.0,
-          purchasePrice: 11000, listPrice: 14200, status: "SOLD" },
+        { make: "Volkswagen", model: "Tiguan", year: 2017, mileage: 98000, color: "Белый",
+          transmission: "АКПП", fuel: "Дизель", engineVol: 2.0,
+          purchasePrice: 15500, listPrice: 18900, status: "SOLD" },
         [{ title: "Замена ремня ГРМ", amount: 300 }]
       ),
       // Продан в этом месяце
       car(
-        { make: "Toyota", model: "RAV4", year: 2018, mileage: 72000, color: "Чёрный",
-          transmission: "АКПП", fuel: "Бензин", engineVol: 2.0,
-          purchasePrice: 15000, listPrice: 19000, status: "SOLD" },
+        { make: "BMW", model: "320d", year: 2018, mileage: 84000, color: "Чёрный",
+          transmission: "АКПП", fuel: "Дизель", engineVol: 2.0,
+          purchasePrice: 19000, listPrice: 23500, status: "SOLD" },
         [{ title: "Новая резина", amount: 500 }]
       ),
       // Продан в ПРОШЛОМ месяце — не должен попасть в выручку текущего
       car(
-        { make: "Ford", model: "Focus", year: 2015, mileage: 130000, color: "Зелёный",
-          transmission: "МКПП", fuel: "Бензин", engineVol: 1.6,
-          purchasePrice: 6000, listPrice: 8000, status: "SOLD" },
+        { make: "Ford", model: "Focus", year: 2016, mileage: 121000, color: "Тёмно-синий",
+          transmission: "МКПП", fuel: "Дизель", engineVol: 1.5,
+          purchasePrice: 7500, listPrice: 9900, status: "SOLD" },
         [{ title: "Сварка порогов", amount: 220 }]
       ),
     ]);
 
+  // Клиенты — австрийские имена, телефоны +43, e-mail на местных доменах.
   const clientData = [
-    ["Андрей Петров", "+7 900 123-45-67", "a.petrov@mail.ru", "BUYER", "WILLHABEN", "Ищет седан до € 16.000, готов на трейд-ин"],
-    ["Марина Соколова", "+7 921 555-11-02", null, "SELLER", "EMPFEHLUNG", "Продаёт Kia Rio 2017"],
-    ["Игорь Ковальчук", "+7 903 777-88-99", "igor.k@gmail.com", "BOTH", "AUTOSCOUT24", "Меняет Solaris на кроссовер"],
-    ["Елена Дорошенко", "+7 916 234-56-78", "e.dor@yandex.ru", "BUYER", "WEBSITE", null],
-    ["Сергей Мельник", "+7 905 888-12-34", null, "BUYER", "LAUFKUNDSCHAFT", "Смотрел Octavia, думает"],
-    ["Ольга Кравец", "+7 926 445-67-89", "o.kravets@mail.ru", "BUYER", "WILLHABEN", "Нужен автомат, бюджет до € 12.000"],
-    ["Дмитрий Волошин", "+7 999 111-22-33", null, "SELLER", "EMPFEHLUNG", "Хочет сдать Duster"],
-    ["Наталья Гуменюк", "+7 912 777-00-11", "n.gum@gmail.com", "BUYER", "AUTOSCOUT24", null],
-    ["Виктор Лысенко", "+7 908 333-44-55", null, "BOTH", "WEBSITE", "Постоянный клиент, третья машина"],
-    ["Алина Шевчук", "+7 967 222-99-88", "alina.sh@mail.ru", "BUYER", "SOCIAL_MEDIA", "Пришла по рекламе в Телеграме"],
+    ["Thomas Gruber", "+43 664 1234501", "t.gruber@gmx.at", "BUYER", "WILLHABEN", "Ищет универсал до € 20.000, предпочитает дизель"],
+    ["Anna Bauer", "+43 660 2345602", null, "SELLER", "EMPFEHLUNG", "Продаёт Skoda Fabia 2018"],
+    ["Michael Huber", "+43 676 3456703", "m.huber@gmail.com", "BOTH", "AUTOSCOUT24", "Меняет Astra на кроссовер"],
+    ["Sabine Wagner", "+43 699 4567804", "s.wagner@aon.at", "BUYER", "WEBSITE", null],
+    ["Andreas Pichler", "+43 664 5678905", null, "BUYER", "LAUFKUNDSCHAFT", "Смотрел Octavia, думает"],
+    ["Julia Steiner", "+43 660 6789006", "j.steiner@a1.net", "BUYER", "WILLHABEN", "Нужен автомат, бюджет до € 15.000"],
+    ["Markus Hofer", "+43 676 7890107", null, "SELLER", "EMPFEHLUNG", "Хочет сдать Clio"],
+    ["Christina Mayer", "+43 699 8901208", "c.mayer@gmx.at", "BUYER", "AUTOSCOUT24", null],
+    ["Stefan Berger", "+43 664 9012309", null, "BOTH", "WEBSITE", "Постоянный клиент, третья машина у нас"],
+    ["Katharina Fuchs", "+43 660 0123410", "k.fuchs@gmail.com", "BUYER", "SOCIAL_MEDIA", "Пришла по рекламе в Instagram"],
   ];
 
   const clients = await Promise.all(
@@ -153,58 +156,58 @@ async function main() {
       p.client.create({ data: { name, phone, email, type, source, notes } })
     )
   );
-  const [andrey, marina, igor, elena, sergey, olga, dmitry, natalia, viktor, alina] = clients;
+  const [thomas, anna, michael, sabine, andreas, julia, markus, christina, stefan, katharina] = clients;
 
   // Продажи (§18, источник истины по продажам/маржа). Проданные авто связываем
   // с покупателями; бронь — RESERVED. financialSnapshot замораживает маржу.
   const emp = await p.user.findFirst({ where: { active: true } });
   const snap = (gross, margin, scheme = "DIFFERENZBESTEUERUNG") => ({ salePriceGross: gross, finalMargin: margin, taxScheme: scheme });
   await Promise.all([
-    p.sale.create({ data: { carId: qashqai.id, clientId: elena.id, stage: "COMPLETED", saleDate: day(-5), actualSalePriceGross: 14200, paymentStatus: "PAID", paymentMethod: "TRANSFER", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(14200, 2416.67) } }),
-    p.sale.create({ data: { carId: rav4.id, clientId: natalia.id, stage: "COMPLETED", saleDate: day(-3), actualSalePriceGross: 19000, paymentStatus: "PAID", paymentMethod: "FINANCING", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(19000, 2916.67) } }),
-    p.sale.create({ data: { carId: focus.id, clientId: igor.id, stage: "COMPLETED", saleDate: lastMonth(), actualSalePriceGross: 8000, paymentStatus: "PAID", paymentMethod: "CASH", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(8000, 1483.33) } }),
-    p.sale.create({ data: { carId: mazda.id, clientId: viktor.id, stage: "RESERVED", reservedAt: day(-2), reservationExpiresAt: day(3), anzahlung: 500, reservationPaymentMethod: "CASH", reservationComment: "Залог внесён, ждёт одобрения кредита" } }),
+    p.sale.create({ data: { carId: tiguan.id, clientId: sabine.id, stage: "COMPLETED", saleDate: day(-5), actualSalePriceGross: 18900, paymentStatus: "PAID", paymentMethod: "TRANSFER", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(18900, 2683.33) } }),
+    p.sale.create({ data: { carId: bmw.id, clientId: christina.id, stage: "COMPLETED", saleDate: day(-3), actualSalePriceGross: 23500, paymentStatus: "PAID", paymentMethod: "FINANCING", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(23500, 3416.67) } }),
+    p.sale.create({ data: { carId: focus.id, clientId: michael.id, stage: "COMPLETED", saleDate: lastMonth(), actualSalePriceGross: 9900, paymentStatus: "PAID", paymentMethod: "CASH", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(9900, 2016.67) } }),
+    p.sale.create({ data: { carId: a4.id, clientId: stefan.id, stage: "RESERVED", reservedAt: day(-2), reservationExpiresAt: day(3), anzahlung: 700, reservationPaymentMethod: "CASH", reservationComment: "Залог внесён, ждёт одобрения кредита" } }),
   ]);
 
   await Promise.all([
-    // ── В работе: по одной-две на каждом этапе воронки ──
-    p.deal.create({ data: { clientId: andrey.id, carId: camry.id, type: "SALE", stage: "NEW", amount: 15500, notes: "Звонил с Авито, хочет посмотреть в выходные", createdAt: day(-1) } }),
-    p.deal.create({ data: { clientId: alina.id, carId: polo.id, type: "SALE", stage: "NEW", amount: 11800, createdAt: day(-2) } }),
-    p.deal.create({ data: { clientId: olga.id, carId: rio.id, type: "SALE", stage: "CONTACT", amount: 9200, notes: "Перезвонить после обеда", createdAt: day(-4) } }),
-    p.deal.create({ data: { clientId: sergey.id, carId: octavia.id, type: "SALE", stage: "TEST_DRIVE", amount: 17500, notes: "Тест-драйв в субботу", createdAt: day(-6) } }),
-    p.deal.create({ data: { clientId: natalia.id, carId: mazda.id, type: "SALE", stage: "NEGOTIATION", amount: 12500, notes: "Торгуется, просит скидку € 500", createdAt: day(-8) } }),
-    p.deal.create({ data: { clientId: viktor.id, carId: mazda.id, type: "SALE", stage: "CONTRACT", amount: 13000, notes: "Залог внесён, договор в пятницу", createdAt: day(-3) } }),
+    // ── В работе: по одной-две на каждом этапе воронки (legacy Deal, UI снят) ──
+    p.deal.create({ data: { clientId: thomas.id, carId: golf.id, type: "SALE", stage: "NEW", amount: 19900, notes: "Обращение с Willhaben, хочет посмотреть в выходные", createdAt: day(-1) } }),
+    p.deal.create({ data: { clientId: katharina.id, carId: polo.id, type: "SALE", stage: "NEW", amount: 13800, createdAt: day(-2) } }),
+    p.deal.create({ data: { clientId: julia.id, carId: fabia.id, type: "SALE", stage: "CONTACT", amount: 12200, notes: "Перезвонить после обеда", createdAt: day(-4) } }),
+    p.deal.create({ data: { clientId: andreas.id, carId: octavia.id, type: "SALE", stage: "TEST_DRIVE", amount: 20900, notes: "Тест-драйв в субботу", createdAt: day(-6) } }),
+    p.deal.create({ data: { clientId: christina.id, carId: a4.id, type: "SALE", stage: "NEGOTIATION", amount: 22000, notes: "Торгуется, просит скидку € 500", createdAt: day(-8) } }),
+    p.deal.create({ data: { clientId: stefan.id, carId: a4.id, type: "SALE", stage: "CONTRACT", amount: 22500, notes: "Залог внесён, договор в пятницу", createdAt: day(-3) } }),
     // Трейд-ин в работе
-    p.deal.create({ data: { clientId: igor.id, carId: duster.id, type: "TRADE_IN", stage: "CONTACT", amount: 10500, notes: "Меняет Solaris с доплатой", createdAt: day(-5) } }),
+    p.deal.create({ data: { clientId: michael.id, carId: clio.id, type: "TRADE_IN", stage: "CONTACT", amount: 10900, notes: "Меняет Astra с доплатой", createdAt: day(-5) } }),
 
     // ── Закрыто в ЭТОМ месяце → выручка и маржа ──
-    p.deal.create({ data: { clientId: elena.id, carId: qashqai.id, type: "SALE", stage: "DONE", amount: 14000, createdAt: day(-20), closedAt: day(-9) } }),
-    p.deal.create({ data: { clientId: viktor.id, carId: rav4.id, type: "SALE", stage: "DONE", amount: 18500, createdAt: day(-25), closedAt: day(-4) } }),
+    p.deal.create({ data: { clientId: sabine.id, carId: tiguan.id, type: "SALE", stage: "DONE", amount: 18900, createdAt: day(-20), closedAt: day(-9) } }),
+    p.deal.create({ data: { clientId: christina.id, carId: bmw.id, type: "SALE", stage: "DONE", amount: 23500, createdAt: day(-25), closedAt: day(-4) } }),
 
     // ── Закрыто в ПРОШЛОМ месяце → в выручку текущего попасть НЕ должно ──
-    p.deal.create({ data: { clientId: dmitry.id, carId: focus.id, type: "SALE", stage: "DONE", amount: 7800, createdAt: day(-45), closedAt: lastMonth() } }),
+    p.deal.create({ data: { clientId: markus.id, carId: focus.id, type: "SALE", stage: "DONE", amount: 9900, createdAt: day(-45), closedAt: lastMonth() } }),
 
     // ── Закупка, закрыта в этом месяце → это не выручка ──
-    p.deal.create({ data: { clientId: marina.id, carId: rio.id, type: "PURCHASE", stage: "DONE", amount: 7000, createdAt: day(-30), closedAt: day(-12) } }),
+    p.deal.create({ data: { clientId: anna.id, carId: fabia.id, type: "PURCHASE", stage: "DONE", amount: 9500, createdAt: day(-30), closedAt: day(-12) } }),
 
     // ── Потеряны ──
-    p.deal.create({ data: { clientId: sergey.id, carId: solaris.id, type: "SALE", stage: "LOST", amount: 10500, notes: "Ушёл к конкурентам", createdAt: day(-14), closedAt: day(-7) } }),
-    p.deal.create({ data: { clientId: olga.id, type: "SALE", stage: "LOST", notes: "Не выходит на связь", createdAt: day(-18), closedAt: day(-10) } }),
+    p.deal.create({ data: { clientId: andreas.id, carId: astra.id, type: "SALE", stage: "LOST", amount: 13900, notes: "Ушёл к конкурентам", createdAt: day(-14), closedAt: day(-7) } }),
+    p.deal.create({ data: { clientId: julia.id, type: "SALE", stage: "LOST", notes: "Не выходит на связь", createdAt: day(-18), closedAt: day(-10) } }),
   ]);
 
   await p.task.createMany({
     data: [
       // type: с авто → FAHRZEUG, иначе ALLGEMEIN (§15.1). Разные приоритеты/статусы для демо.
-      { title: "Перезвонить Андрею по Camry — обещал ответ", type: "FAHRZEUG", priority: "HIGH", dueDate: dueDay(-3), clientId: andrey.id, carId: camry.id },
-      { title: "Отдать документы в банк по Qashqai", type: "ALLGEMEIN", priority: "URGENT", dueDate: dueDay(-1), clientId: elena.id },
-      { title: "Тест-драйв Octavia в 15:00", type: "FAHRZEUG", priority: "MEDIUM", status: "IN_PROGRESS", dueDate: dueDay(0), clientId: sergey.id, carId: octavia.id },
-      { title: "Подписать договор с Виктором", type: "FAHRZEUG", priority: "HIGH", dueDate: dueDay(0), clientId: viktor.id, carId: mazda.id },
-      { title: "Выставить Polo на Авито", type: "FAHRZEUG", priority: "LOW", dueDate: dueDay(1), carId: polo.id },
-      { title: "Забрать стойки для Solaris", type: "FAHRZEUG", priority: "MEDIUM", status: "BLOCKED", dueDate: dueDay(2), carId: solaris.id },
-      { title: "Записать Duster на химчистку", type: "FAHRZEUG", priority: "LOW", dueDate: dueDay(5), carId: duster.id },
-      { title: "Найти зимнюю резину под Camry", type: "FAHRZEUG", priority: "LOW", dueDate: null, carId: camry.id },
-      { title: "Оплатить рекламу на Авито", type: "ALLGEMEIN", priority: "MEDIUM", status: "DONE", completedAt: day(-7), dueDate: dueDay(-8) },
-      { title: "Забрать RAV4 с мойки", type: "FAHRZEUG", priority: "MEDIUM", status: "DONE", completedAt: day(-4), dueDate: dueDay(-5), carId: rav4.id },
+      { title: "Перезвонить Thomas по Golf — обещал ответ", type: "FAHRZEUG", priority: "HIGH", dueDate: dueDay(-3), clientId: thomas.id, carId: golf.id },
+      { title: "Отдать документы в банк по Tiguan", type: "ALLGEMEIN", priority: "URGENT", dueDate: dueDay(-1), clientId: sabine.id },
+      { title: "Тест-драйв Octavia в 15:00", type: "FAHRZEUG", priority: "MEDIUM", status: "IN_PROGRESS", dueDate: dueDay(0), clientId: andreas.id, carId: octavia.id },
+      { title: "Подписать договор со Stefan", type: "FAHRZEUG", priority: "HIGH", dueDate: dueDay(0), clientId: stefan.id, carId: a4.id },
+      { title: "Выставить Polo на Willhaben", type: "FAHRZEUG", priority: "LOW", dueDate: dueDay(1), carId: polo.id },
+      { title: "Забрать стойки для Astra", type: "FAHRZEUG", priority: "MEDIUM", status: "BLOCKED", dueDate: dueDay(2), carId: astra.id },
+      { title: "Записать Clio на химчистку", type: "FAHRZEUG", priority: "LOW", dueDate: dueDay(5), carId: clio.id },
+      { title: "Найти зимнюю резину под Golf", type: "FAHRZEUG", priority: "LOW", dueDate: null, carId: golf.id },
+      { title: "Оплатить рекламу на Willhaben", type: "ALLGEMEIN", priority: "MEDIUM", status: "DONE", completedAt: day(-7), dueDate: dueDay(-8) },
+      { title: "Забрать BMW с мойки", type: "FAHRZEUG", priority: "MEDIUM", status: "DONE", completedAt: day(-4), dueDate: dueDay(-5), carId: bmw.id },
     ],
   });
 
@@ -212,19 +215,19 @@ async function main() {
   const at = (offset, hh, mm) => { const d = new Date(); d.setHours(hh, mm, 0, 0); d.setDate(d.getDate() + offset); return d; };
   await p.appointment.createMany({
     data: [
-      { clientName: andrey.name, phone: andrey.phone, clientId: andrey.id, carId: camry.id, employeeId: emp?.id, startAt: at(0, 10, 0), endAt: at(0, 10, 30), type: "BESICHTIGUNG", status: "BESTAETIGT" },
-      { clientName: sergey.name, phone: sergey.phone, clientId: sergey.id, carId: octavia.id, employeeId: emp?.id, startAt: at(0, 14, 0), endAt: at(0, 15, 0), type: "PROBEFAHRT", status: "GEPLANT" },
-      { clientName: viktor.name, phone: viktor.phone, clientId: viktor.id, carId: mazda.id, employeeId: emp?.id, startAt: at(1, 11, 0), endAt: at(1, 11, 45), type: "ABHOLUNG", status: "GEPLANT" },
-      { clientName: elena.name, phone: elena.phone, clientId: elena.id, carId: qashqai.id, startAt: at(2, 16, 0), endAt: at(2, 16, 30), type: "BESICHTIGUNG", status: "GEPLANT" },
-      { clientName: "Максим Гость", phone: "+43 660 1234567", startAt: at(-1, 9, 0), endAt: at(-1, 9, 30), type: "BESICHTIGUNG", status: "NICHT_ERSCHIENEN" },
+      { clientName: thomas.name, phone: thomas.phone, clientId: thomas.id, carId: golf.id, employeeId: emp?.id, startAt: at(0, 10, 0), endAt: at(0, 10, 30), type: "BESICHTIGUNG", status: "BESTAETIGT" },
+      { clientName: andreas.name, phone: andreas.phone, clientId: andreas.id, carId: octavia.id, employeeId: emp?.id, startAt: at(0, 14, 0), endAt: at(0, 15, 0), type: "PROBEFAHRT", status: "GEPLANT" },
+      { clientName: stefan.name, phone: stefan.phone, clientId: stefan.id, carId: a4.id, employeeId: emp?.id, startAt: at(1, 11, 0), endAt: at(1, 11, 45), type: "ABHOLUNG", status: "GEPLANT" },
+      { clientName: sabine.name, phone: sabine.phone, clientId: sabine.id, carId: tiguan.id, startAt: at(2, 16, 0), endAt: at(2, 16, 30), type: "BESICHTIGUNG", status: "GEPLANT" },
+      { clientName: "Wolfgang Reiter", phone: "+43 660 7654321", startAt: at(-1, 9, 0), endAt: at(-1, 9, 30), type: "BESICHTIGUNG", status: "NICHT_ERSCHIENEN" },
     ],
   });
 
   // Гарантийные случаи (§19) по проданным авто.
   await p.warrantyCase.createMany({
     data: [
-      { carId: focus.id, clientId: igor.id, complaintDescription: "Стук в передней подвеске на неровностях", status: "IN_REPAIR", responsibleUserId: emp?.id, workshop: "Werkstatt Müller", clientReportedAt: day(-4), openedAt: day(-4), deadline: day(3), diagnosis: "Изношены стойки стабилизатора", decision: "Замена по гарантии" },
-      { carId: qashqai.id, clientId: elena.id, complaintDescription: "Ошибка на панели — датчик давления в шинах", status: "RESOLVED", responsibleUserId: emp?.id, clientReportedAt: day(-15), openedAt: day(-15), diagnosis: "Неисправен датчик TPMS", decision: "Датчик заменён", finalCost: 120, resolvedAt: day(-10) },
+      { carId: focus.id, clientId: michael.id, complaintDescription: "Стук в передней подвеске на неровностях", status: "IN_REPAIR", responsibleUserId: emp?.id, workshop: "Werkstatt Müller", clientReportedAt: day(-4), openedAt: day(-4), deadline: day(3), diagnosis: "Изношены стойки стабилизатора", decision: "Замена по гарантии" },
+      { carId: tiguan.id, clientId: sabine.id, complaintDescription: "Ошибка на панели — датчик давления в шинах", status: "RESOLVED", responsibleUserId: emp?.id, clientReportedAt: day(-15), openedAt: day(-15), diagnosis: "Неисправен датчик TPMS", decision: "Датчик заменён", finalCost: 120, resolvedAt: day(-10) },
     ],
   });
 

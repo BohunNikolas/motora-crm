@@ -49,7 +49,7 @@ export function TaskForm({
         <div className="grid grid-cols-4 gap-4">
           <div className="col-span-2">
             <label className="label" htmlFor="title">Название *</label>
-            <input id="title" name="title" required defaultValue={defaults.title} className="field" placeholder="Перезвонить Андрею по Camry" />
+            <input id="title" name="title" required defaultValue={defaults.title} className="field" placeholder="Перезвонить Thomas по Golf" />
           </div>
           <div>
             <label className="label" htmlFor="type">Тип *</label>
