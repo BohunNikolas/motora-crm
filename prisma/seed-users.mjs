@@ -30,7 +30,7 @@ function tempPassword() {
 
 const USERS = [
   { email: "ivan@motorhof.local", name: "Иван", roles: ["ADMIN", "PARTNER", "SALES"] },
-  { email: "vitalik@motorhof.local", name: "Виталик", roles: ["PARTNER", "SALES"] },
+  { email: "vitalik@motorhof.local", name: "Vitaliy", roles: ["PARTNER", "SALES"] },
   { email: "sergey@motorhof.local", name: "Сергей", roles: ["PARTNER", "TECHNICAL"] },
   { email: "sales@motorhof.local", name: "Продавец", roles: ["SALES"] },
   { email: "autohub@motorhof.local", name: "AutoHub", roles: ["TECHNICAL"] },
