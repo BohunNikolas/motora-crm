@@ -262,6 +262,8 @@ model User {
   auditLogs    AuditLog[]
   sales        Sale[]
   expenses     Expense[]
+  assignedTasks Task[]  @relation("TaskAssignee")
+  createdTasks  Task[]  @relation("TaskCreator")
 }
 
 model Session {
@@ -318,15 +320,29 @@ model Deal {
 }
 
 model Task {
-  id        String    @id @default(cuid())
-  title     String
-  dueDate   DateTime?
-  done      Boolean   @default(false)
-  createdAt DateTime  @default(now())
+  id          String    @id @default(cuid())
+  // §15.1: FAHRZEUG-задача обязана иметь авто, ALLGEMEIN — может без.
+  type        String    @default("ALLGEMEIN") // FAHRZEUG | ALLGEMEIN
+  title       String
+  description String?
+  priority    String    @default("MEDIUM")    // LOW | MEDIUM | HIGH | URGENT
+  // status заменил булев done: OPEN|IN_PROGRESS|BLOCKED|DONE|CANCELLED.
+  // Отмена — CANCELLED (soft, §15.2), физического удаления нет.
+  status      String    @default("OPEN")
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
   car       Car?      @relation(fields: [carId], references: [id], onDelete: SetNull)
   carId     String?
   client    Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
   clientId  String?
   deal      Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
   dealId    String?
+
+  assignedTo       User?   @relation("TaskAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  assignedToUserId String?
+  createdBy        User?   @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById      String?
 }

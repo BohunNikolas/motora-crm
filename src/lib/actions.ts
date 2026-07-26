@@ -11,6 +11,7 @@ import {
   SALES_STATUS_SET,
   TECH_STATUS_SET,
   SALE_FLOW_STATUSES,
+  TASK_OPEN_STATUSES,
   pickerlNeedsAttention,
   isPartnerOwner,
   internalInvoiceComplete,
@@ -27,7 +28,7 @@ async function pickerlAskSuffix(
 ): Promise<string> {
   if (!pickerlNeedsAttention(data)) return "";
   const existing = await prisma.task.findFirst({
-    where: { carId, done: false, title: PICKERL_TITLE },
+    where: { carId, status: { in: TASK_OPEN_STATUSES }, title: PICKERL_TITLE },
   });
   return existing ? "" : "?pickerl=ask";
 }
@@ -415,7 +416,7 @@ export async function createPickerlTask(carId: string) {
   const car = await prisma.car.findUnique({ where: { id: carId } });
   if (!car) return;
   const existing = await prisma.task.findFirst({
-    where: { carId, done: false, title: PICKERL_TITLE },
+    where: { carId, status: { in: TASK_OPEN_STATUSES }, title: PICKERL_TITLE },
   });
   if (!existing) {
     // Срок — 1-е число месяца Begutachtung; если месяца нет, через 2 недели.
@@ -423,7 +424,17 @@ export async function createPickerlTask(carId: string) {
       car.pickerlMonth && car.pickerlYear
         ? new Date(`${car.pickerlYear}-${String(car.pickerlMonth).padStart(2, "0")}-01T00:00:00`)
         : new Date(Date.now() + 14 * 86_400_000);
-    await prisma.task.create({ data: { title: PICKERL_TITLE, carId, dueDate: due } });
+    await prisma.task.create({
+      data: {
+        title: PICKERL_TITLE,
+        type: "FAHRZEUG",
+        priority: "HIGH", // §57a-Begutachtung — срочная задача по авто
+        status: "OPEN",
+        carId,
+        dueDate: due,
+        createdById: user.id,
+      },
+    });
     await audit(user.id, "Task", carId, "pickerl-task");
   }
   revalidatePath(`/cars/${carId}`);
@@ -617,7 +628,10 @@ export async function completeSale(carId: string, fd: FormData) {
     });
   }
   // §18.2: закрыть незавершённые подготовительные задачи по авто.
-  await prisma.task.updateMany({ where: { carId, done: false }, data: { done: true } });
+  await prisma.task.updateMany({
+    where: { carId, status: { in: TASK_OPEN_STATUSES } },
+    data: { status: "DONE", completedAt: new Date() },
+  });
 
   await audit(user.id, "Sale", sale.id, overrideReason ? "sell-below-min-override" : "sell", {
     after: { carId, clientId, salePrice, finalMargin: snapshot.finalMargin, awaitingInternalInvoice: awaitingInvoice || undefined },
@@ -875,40 +889,80 @@ export async function deleteDeal(id: string) {
   revalidateAll();
 }
 
-// ─── Задачи ────────────────────────────────────────────────────
+// ─── Задачи (§15) ──────────────────────────────────────────────
+
+// Сборка данных задачи из формы (§15.1). Общая для create/update.
+// FAHRZEUG-задача обязана иметь авто; иначе тип принудительно ALLGEMEIN.
+function taskDataFromForm(fd: FormData) {
+  const type = str(fd, "type") === "FAHRZEUG" ? "FAHRZEUG" : "ALLGEMEIN";
+  const carId = str(fd, "carId");
+  if (type === "FAHRZEUG" && !carId) {
+    throw new Error("Задача по автомобилю должна быть привязана к авто (§15.1)");
+  }
+  return {
+    type,
+    title: str(fd, "title") ?? "Задача",
+    description: str(fd, "description"),
+    priority: str(fd, "priority") ?? "MEDIUM",
+    dueDate: date(fd, "dueDate"),
+    assignedToUserId: str(fd, "assignedToUserId"),
+    // ALLGEMEIN может быть без авто; carId значим только для FAHRZEUG.
+    carId: type === "FAHRZEUG" ? carId : null,
+  };
+}
 
 export async function createTask(fd: FormData) {
-  await requireCan("task.manage");
-  const due = str(fd, "dueDate");
-  await prisma.task.create({
+  const user = await requireCan("task.manage");
+  const status = str(fd, "status") ?? "OPEN";
+  const task = await prisma.task.create({
     data: {
-      title: str(fd, "title") ?? "Задача",
-      // <input type="date"> отдаёт "2026-07-17". new Date("2026-07-17") — это ПОЛНОЧЬ UTC,
-      // а срок задачи — календарный день по локальному времени. Без "T00:00:00" в поясах
-      // западнее UTC задача «на сегодня» сразу попадала бы в просроченные.
-      dueDate: due ? new Date(`${due}T00:00:00`) : null,
-      clientId: str(fd, "clientId"),
-      carId: str(fd, "carId"),
+      ...taskDataFromForm(fd),
+      status,
+      completedAt: status === "DONE" ? new Date() : null,
+      createdById: user.id,
     },
+  });
+  await audit(user.id, "Task", task.id, "create", {
+    after: { title: task.title, type: task.type, priority: task.priority, status: task.status, carId: task.carId },
   });
   revalidateAll();
 }
 
-export async function toggleTask(id: string) {
-  await requireCan("task.manage");
-  const t = await prisma.task.findUnique({ where: { id } });
-  if (!t) return;
-  await prisma.task.update({ where: { id }, data: { done: !t.done } });
+export async function updateTask(id: string, fd: FormData) {
+  const user = await requireCan("task.manage");
+  const status = str(fd, "status") ?? "OPEN";
+  await prisma.task.update({
+    where: { id },
+    data: {
+      ...taskDataFromForm(fd),
+      status,
+      // completedAt держим согласованным со статусом: DONE → отметка времени, иначе снят.
+      completedAt: status === "DONE" ? new Date() : null,
+    },
+  });
+  await audit(user.id, "Task", id, "update", { after: { status } });
+  revalidatePath("/tasks");
+  revalidateAll();
+  redirect("/tasks");
+}
+
+/** Сменить статус задачи (§15.1) — быстрое действие из списка/карточки. */
+export async function setTaskStatus(id: string, status: string) {
+  const user = await requireCan("task.manage");
+  await prisma.task.update({
+    where: { id },
+    data: { status, completedAt: status === "DONE" ? new Date() : null },
+  });
+  await audit(user.id, "Task", id, "status", { after: { status } });
   revalidatePath("/tasks");
   revalidatePath("/");
 }
 
-// Удаление — только ADMIN («продавец не может удалять что-либо»).
-// Мягкая отмена задач (CANCELLED) — фаза 4.
-export async function deleteTask(id: string) {
-  const user = await requireCan("delete.any");
-  await prisma.task.delete({ where: { id } });
-  await audit(user.id, "Task", id, "delete");
+/** Отмена задачи — soft (§15.2/§21): статус CANCELLED, физически не удаляем, историю сохраняем. */
+export async function cancelTask(id: string) {
+  const user = await requireCan("task.manage");
+  const t = await prisma.task.update({ where: { id }, data: { status: "CANCELLED" } });
+  await audit(user.id, "Task", id, "cancel", { before: { title: t.title } });
   revalidatePath("/tasks");
   revalidatePath("/");
 }

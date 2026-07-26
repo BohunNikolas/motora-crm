@@ -12,6 +12,7 @@ import {
   DEAL_STAGES,
   STAGE_LABEL,
   DEAL_TYPE,
+  TASK_OPEN_STATUSES,
 } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ export default async function Dashboard() {
     // Без take/orderBy по dueDate: SQLite ставит NULL первыми, и бессрочные задачи
     // вытеснили бы просроченные из списка. Сортируем в JS — срочное наверх, «без срока» вниз.
     prisma.task.findMany({
-      where: { done: false },
+      where: { status: { in: TASK_OPEN_STATUSES } },
       include: { client: true, car: true },
     }),
     // Счётчики нужны, чтобы отличить «ничего не заведено» от «всё закрыто»:

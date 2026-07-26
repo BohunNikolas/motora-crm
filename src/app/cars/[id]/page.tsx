@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
-import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus, assignParking, createPickerlTask, uploadCarFile, deleteCarFile, reserveCar, completeSale, cancelSale } from "@/lib/actions";
+import { addExpense, approveExpense, deleteExpense, deleteCar, setCarStatus, assignParking, createPickerlTask, uploadCarFile, deleteCarFile, reserveCar, completeSale, cancelSale, createTask } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import { storageConfigured } from "@/lib/storage";
@@ -46,6 +46,12 @@ import {
   SERVICEHEFT,
   JA_NEIN_UNBEKANNT,
   BODY_PART_LABEL,
+  dueLabel,
+  isOverdue,
+  TASK_PRIORITY,
+  TASK_PRIORITY_ORDER,
+  TASK_STATUS,
+  TASK_OPEN_STATUSES,
   type SaleSnapshot,
 } from "@/lib/format";
 
@@ -79,6 +85,12 @@ export default async function CarPage({
       parkingMoves: { orderBy: { movedAt: "desc" }, take: 6 },
       files: { orderBy: { createdAt: "asc" } },
       sales: { include: { client: true, employee: true }, orderBy: { createdAt: "desc" } },
+      // Задачи по авто (§15.3): активные и недавно завершённые, отменённые скрыты.
+      tasks: {
+        where: { status: { not: "CANCELLED" } },
+        include: { assignedTo: { select: { name: true } } },
+        orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
+      },
     },
   });
 
@@ -94,6 +106,12 @@ export default async function CarPage({
         prisma.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       ])
     : [[], []];
+
+  // Быстрые задачи в карточке авто (§15.3). Список пользователей для «Ответственный».
+  const canManageTasks = can(user, "task.manage");
+  const taskUsers = canManageTasks
+    ? await prisma.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } })
+    : [];
 
   // Файлы (§8.5). Финансовые документы прячем от SALES/TECHNICAL.
   const seeFinDocs = can(user, "see.acquisition");
@@ -315,6 +333,53 @@ export default async function CarPage({
               <div className="mt-5 border-t border-line pt-4">
                 <div className="label mb-1.5">Заметки</div>
                 <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{car.notes}</p>
+              </div>
+            )}
+          </section>
+
+          {/* Задачи по авто (§15.3): быстрая форма + список. Появляются и на /tasks. */}
+          <section className="panel animate-in delay-1 p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[15px] font-bold">Задачи</h2>
+              <Link href={`/tasks/new?carId=${car.id}`} className="text-[13px] text-muted hover:text-accent">
+                Дополнительные поля →
+              </Link>
+            </div>
+            {canManageTasks && (
+              <form action={createTask} className="mb-4 flex flex-wrap gap-2">
+                <input type="hidden" name="type" value="FAHRZEUG" />
+                <input type="hidden" name="carId" value={car.id} />
+                <input name="title" required placeholder="Новая задача по авто" className="field min-w-[220px] flex-1" />
+                <select name="assignedToUserId" defaultValue="" className="field w-[150px]">
+                  <option value="">— ответственный —</option>
+                  {taskUsers.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
+                </select>
+                <input name="dueDate" type="date" className="field w-[150px]" />
+                <select name="priority" defaultValue="MEDIUM" className="field w-[130px]">
+                  {TASK_PRIORITY_ORDER.map((k) => (<option key={k} value={k}>{TASK_PRIORITY[k].label}</option>))}
+                </select>
+                <button type="submit" className="btn btn-primary">Создать</button>
+              </form>
+            )}
+            {car.tasks.length === 0 ? (
+              <p className="text-[13px] text-muted">Задач по этому авто нет.</p>
+            ) : (
+              <div className="flex flex-col">
+                {car.tasks.map((t) => {
+                  const isOpen = TASK_OPEN_STATUSES.includes(t.status);
+                  return (
+                    <div key={t.id} className="flex items-center gap-2.5 border-b border-line py-2 last:border-none">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${!isOpen ? "bg-[var(--muted)]" : isOverdue(t.dueDate) ? "bg-red" : "bg-accent"}`} />
+                      <Link href={`/tasks/${t.id}/edit`} className={`min-w-0 flex-1 text-[13.5px] hover:text-accent ${t.status === "DONE" ? "text-muted line-through" : ""}`}>
+                        {t.title}
+                      </Link>
+                      {t.assignedTo && <span className="text-[12px] text-muted">{t.assignedTo.name}</span>}
+                      <span className={`chip ${TASK_PRIORITY[t.priority]?.cls ?? "chip-muted"}`}>{TASK_PRIORITY[t.priority]?.label ?? t.priority}</span>
+                      {t.status !== "OPEN" && <span className={`chip ${TASK_STATUS[t.status]?.cls ?? "chip-muted"}`}>{TASK_STATUS[t.status]?.label ?? t.status}</span>}
+                      <span className={`whitespace-nowrap text-[12px] ${isOpen && isOverdue(t.dueDate) ? "font-semibold text-red" : "text-muted"}`}>{dueLabel(t.dueDate)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>

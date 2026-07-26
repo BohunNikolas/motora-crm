@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ConfirmButton } from "@/components/confirm-button";
 import { deleteClient } from "@/lib/actions";
-import { fmtMoney, fmtDate, dueLabel, isOverdue, CLIENT_TYPE, STAGE_LABEL, DEAL_TYPE } from "@/lib/format";
+import { fmtMoney, fmtDate, dueLabel, isOverdue, CLIENT_TYPE, STAGE_LABEL, DEAL_TYPE, TASK_OPEN_STATUSES } from "@/lib/format";
 import { requireUser } from "@/lib/auth";
 import { viewerFlags } from "@/lib/authz";
 
@@ -24,14 +24,14 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     where: { id },
     include: {
       deals: { include: { car: true }, orderBy: { createdAt: "desc" } },
-      tasks: { orderBy: [{ done: "asc" }, { dueDate: "asc" }] },
+      tasks: { orderBy: [{ status: "asc" }, { dueDate: "asc" }] },
     },
   });
 
   if (!client) notFound();
 
   const activeDeals = client.deals.filter((d) => !["DONE", "LOST"].includes(d.stage));
-  const openTasks = client.tasks.filter((t) => !t.done);
+  const openTasks = client.tasks.filter((t) => TASK_OPEN_STATUSES.includes(t.status));
 
   const contacts: [string, React.ReactNode][] = [
     ["Телефон", <a key="p" href={`tel:${client.phone.replace(/[^\d+]/g, "")}`} className="mono hover:text-accent">{client.phone}</a>],
@@ -157,27 +157,30 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
             <p className="text-[13px] text-muted">Задач по клиенту нет.</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {client.tasks.map((t) => (
+              {client.tasks.map((t) => {
+                const isOpen = TASK_OPEN_STATUSES.includes(t.status);
+                return (
                 <div key={t.id} className="flex items-start gap-2.5">
                   <div
                     className={`mt-[5px] h-2 w-2 shrink-0 rounded-full ${
-                      t.done ? "bg-[var(--muted)]" : isOverdue(t.dueDate) ? "bg-red" : "bg-accent"
+                      !isOpen ? "bg-[var(--muted)]" : isOverdue(t.dueDate) ? "bg-red" : "bg-accent"
                     }`}
                   />
                   <div className="min-w-0">
-                    <div className={`text-[14px] ${t.done ? "text-muted line-through" : "font-medium"}`}>
+                    <div className={`text-[14px] ${!isOpen ? "text-muted line-through" : "font-medium"}`}>
                       {t.title}
                     </div>
                     <div
                       className={`text-[12px] ${
-                        !t.done && isOverdue(t.dueDate) ? "font-semibold text-red" : "text-muted"
+                        isOpen && isOverdue(t.dueDate) ? "font-semibold text-red" : "text-muted"
                       }`}
                     >
                       {dueLabel(t.dueDate)}
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

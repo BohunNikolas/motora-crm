@@ -400,6 +400,33 @@ export const expenseVat = (e: ExpenseAmountLike): Dec => round2(dec(e.amountGros
 export const expensePaid = (e: { paymentStatus: string; amountGross: Prisma.Decimal; paidAmount: Prisma.Decimal | null }): Dec =>
   e.paymentStatus === "PAID" ? dec(e.amountGross) : e.paymentStatus === "PARTIALLY_PAID" && e.paidAmount ? dec(e.paidAmount) : new Decimal(0);
 
+// ─── Задачи (§15) ───────────────────────────────────────────────
+
+export const TASK_TYPE: Record<string, string> = {
+  FAHRZEUG: "По автомобилю",
+  ALLGEMEIN: "Общая",
+};
+export const TASK_TYPE_ORDER = Object.keys(TASK_TYPE);
+
+export const TASK_PRIORITY: Record<string, { label: string; cls: string }> = {
+  LOW: { label: "Низкий", cls: "chip-muted" },
+  MEDIUM: { label: "Средний", cls: "chip-blue" },
+  HIGH: { label: "Высокий", cls: "chip-amber" },
+  URGENT: { label: "Срочный", cls: "chip-red" },
+};
+export const TASK_PRIORITY_ORDER = Object.keys(TASK_PRIORITY);
+
+export const TASK_STATUS: Record<string, { label: string; cls: string }> = {
+  OPEN: { label: "Открыта", cls: "chip-blue" },
+  IN_PROGRESS: { label: "В работе", cls: "chip-amber" },
+  BLOCKED: { label: "Заблокирована", cls: "chip-red" },
+  DONE: { label: "Выполнена", cls: "chip-green" },
+  CANCELLED: { label: "Отменена", cls: "chip-muted" },
+};
+export const TASK_STATUS_ORDER = Object.keys(TASK_STATUS);
+// Активные (не завершённые и не отменённые) — для счётчиков «Требует внимания» и автозакрытия.
+export const TASK_OPEN_STATUSES = ["OPEN", "IN_PROGRESS", "BLOCKED"];
+
 // ─── Бронь и продажа (§18) ──────────────────────────────────────
 
 // Статусы, которые ставятся ТОЛЬКО через поток брони/продажи (§18), а не прямой

@@ -180,16 +180,17 @@ async function main() {
 
   await p.task.createMany({
     data: [
-      { title: "Перезвонить Андрею по Camry — обещал ответ", dueDate: dueDay(-3), clientId: andrey.id, carId: camry.id },
-      { title: "Отдать документы в банк по Qashqai", dueDate: dueDay(-1), clientId: elena.id },
-      { title: "Тест-драйв Octavia в 15:00", dueDate: dueDay(0), clientId: sergey.id, carId: octavia.id },
-      { title: "Подписать договор с Виктором", dueDate: dueDay(0), clientId: viktor.id, carId: mazda.id },
-      { title: "Выставить Polo на Авито", dueDate: dueDay(1), carId: polo.id },
-      { title: "Забрать стойки для Solaris", dueDate: dueDay(2), carId: solaris.id },
-      { title: "Записать Duster на химчистку", dueDate: dueDay(5), carId: duster.id },
-      { title: "Найти зимнюю резину под Camry", dueDate: null, carId: camry.id },
-      { title: "Оплатить рекламу на Авито", dueDate: dueDay(-8), done: true },
-      { title: "Забрать RAV4 с мойки", dueDate: dueDay(-5), done: true, carId: rav4.id },
+      // type: с авто → FAHRZEUG, иначе ALLGEMEIN (§15.1). Разные приоритеты/статусы для демо.
+      { title: "Перезвонить Андрею по Camry — обещал ответ", type: "FAHRZEUG", priority: "HIGH", dueDate: dueDay(-3), clientId: andrey.id, carId: camry.id },
+      { title: "Отдать документы в банк по Qashqai", type: "ALLGEMEIN", priority: "URGENT", dueDate: dueDay(-1), clientId: elena.id },
+      { title: "Тест-драйв Octavia в 15:00", type: "FAHRZEUG", priority: "MEDIUM", status: "IN_PROGRESS", dueDate: dueDay(0), clientId: sergey.id, carId: octavia.id },
+      { title: "Подписать договор с Виктором", type: "FAHRZEUG", priority: "HIGH", dueDate: dueDay(0), clientId: viktor.id, carId: mazda.id },
+      { title: "Выставить Polo на Авито", type: "FAHRZEUG", priority: "LOW", dueDate: dueDay(1), carId: polo.id },
+      { title: "Забрать стойки для Solaris", type: "FAHRZEUG", priority: "MEDIUM", status: "BLOCKED", dueDate: dueDay(2), carId: solaris.id },
+      { title: "Записать Duster на химчистку", type: "FAHRZEUG", priority: "LOW", dueDate: dueDay(5), carId: duster.id },
+      { title: "Найти зимнюю резину под Camry", type: "FAHRZEUG", priority: "LOW", dueDate: null, carId: camry.id },
+      { title: "Оплатить рекламу на Авито", type: "ALLGEMEIN", priority: "MEDIUM", status: "DONE", completedAt: day(-7), dueDate: dueDay(-8) },
+      { title: "Забрать RAV4 с мойки", type: "FAHRZEUG", priority: "MEDIUM", status: "DONE", completedAt: day(-4), dueDate: dueDay(-5), carId: rav4.id },
     ],
   });
 
