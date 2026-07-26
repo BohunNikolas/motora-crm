@@ -3,29 +3,43 @@ import { prisma } from "@/lib/prisma";
 import { Cell } from "@/components/cell-link";
 import { requireUser } from "@/lib/auth";
 import { viewerFlags } from "@/lib/authz";
-import { fmtMoney, sumMoney, carCost, carMargin, mhCode, internalCode, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
+import { fmtMoney, sumMoney, carCost, carMargin, mhCode, internalCode, carAttention, nowMs, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+
+// Метки фильтров «Требует внимания» (§5.5) — для подзаголовка и сброса.
+const ATTENTION_LABEL: Record<string, string> = {
+  pickerl: "Pickerl требует внимания",
+  nophoto: "без фотографий",
+  nodocs: "без обязательных документов",
+  age30: "на складе более 30 дней",
+  age60: "на складе более 60 дней",
+  age90: "на складе более 90 дней",
+};
 
 export default async function CarsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; attention?: string; stock?: string }>;
 }) {
-  const { q, status } = await searchParams;
+  const { q, status, attention, stock } = await searchParams;
   const user = await requireUser();
   const flags = viewerFlags(user);
 
+  const where: import("@prisma/client").Prisma.CarWhereInput = {};
+  if (status && CAR_STATUS[status]) where.status = status;
+  if (stock === "active") where.status = { notIn: ["SOLD", "ARCHIVED"] };
+
   const all = await prisma.car.findMany({
-    where: status && CAR_STATUS[status] ? { status } : undefined,
-    include: { expenses: true },
+    where,
+    include: { expenses: true, files: { select: { kind: true, docType: true } } },
     orderBy: { createdAt: "desc" },
   });
 
   // Поиск в JS (регистронезависимый, кириллица). Ищем по марке/модели/VIN/году,
   // а также по MH-коду и парковочному месту (§6.2).
   const needle = q?.trim().toLowerCase();
-  const cars = needle
+  const searched = needle
     ? all.filter((c) =>
         [
           c.make,
@@ -39,11 +53,27 @@ export default async function CarsPage({
       )
     : all;
 
+  // Фильтр «Требует внимания» (§5.5) — применяется поверх поиска, в JS.
+  const NOW = nowMs();
+  const cars = attention
+    ? searched.filter((c) => {
+        const a = carAttention(c, NOW);
+        if (attention === "pickerl") return a.pickerl;
+        if (attention === "nophoto") return a.noPhoto;
+        if (attention === "nodocs") return a.noDocs;
+        if (attention === "age30") return a.age >= 30;
+        if (attention === "age60") return a.age >= 60;
+        if (attention === "age90") return a.age >= 90;
+        return true;
+      })
+    : searched;
+
   const counts = await prisma.car.groupBy({ by: ["status"], _count: true });
   const countOf = (s: string) => counts.find((c) => c.status === s)?._count ?? 0;
   // Всего авто в базе — считаем по groupBy, а не по `all`: `all` уже отфильтрован по статусу.
   const total = counts.reduce((s, c) => s + c._count, 0);
-  const filtered = Boolean(status) || Boolean(needle);
+  const filtered = Boolean(status) || Boolean(needle) || Boolean(attention) || stock === "active";
+  const activeFilterLabel = attention ? ATTENTION_LABEL[attention] : stock === "active" ? "активный склад (без проданных)" : null;
 
   const totalCost = sumMoney(cars.map((c) => carCost(c)));
   const totalMargin = sumMoney(cars.map((c) => carMargin(c)));
@@ -63,6 +93,7 @@ export default async function CarsPage({
           <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">Автомобили</h1>
           <p className="mt-1 text-sm text-muted">
             {filtered ? `найдено ${cars.length} из ${total}` : `${total} в базе`}
+            {activeFilterLabel && <> · фильтр: <span className="text-ink">{activeFilterLabel}</span> <Link href="/cars" className="text-accent hover:underline">сбросить</Link></>}
             {flags.seeMargin && cars.length > 0 &&
               ` · себестоимость ${fmtMoney(totalCost)} · маржа ${fmtMoney(totalMargin)}`}
           </p>

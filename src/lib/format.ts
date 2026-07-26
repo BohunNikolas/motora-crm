@@ -483,6 +483,43 @@ export const fmtTime = (d: Date | string) => viennaTimeFmt.format(new Date(d));
 /** Дата+время: «26.07.2026 14:30». */
 export const fmtDateTime = (d: Date | string) => `${fmtDate(d)} ${fmtTime(d)}`;
 
+// ─── Дашборд §5 ─────────────────────────────────────────────────
+
+/**
+ * Возраст авто на складе в днях (§5.5): от arrivalDate, при её отсутствии —
+ * от purchaseDate, иначе от createdAt. nowMs передаётся явно (чистота рендера).
+ */
+export const carAgeDays = (
+  car: { arrivalDate: Date | null; purchaseDate: Date | null; createdAt: Date },
+  nowMs: number
+): number => {
+  const base = car.arrivalDate ?? car.purchaseDate ?? car.createdAt;
+  return Math.floor((nowMs - new Date(base).getTime()) / 86_400_000);
+};
+
+// Текущее время как результат обычной функции (не Date.now() прямо в рендере —
+// иначе react-hooks/purity ругается на нечистоту серверного компонента).
+export const nowMs = (): number => Date.now();
+
+type CarForAttention = CarForDocs & {
+  arrivalDate: Date | null; purchaseDate: Date | null; createdAt: Date;
+  pickerlMonth: number | null; pickerlYear: number | null;
+  status: string;
+  files: { kind: string; docType: string | null }[];
+};
+
+/** Признаки «требует внимания» одного авто (§5.5). Возраст — только для непроданных. */
+export const carAttention = (car: CarForAttention, now: number) => {
+  const presentDocs = new Set(car.files.filter((f) => f.kind === "DOCUMENT" && f.docType).map((f) => f.docType!));
+  const active = car.status !== "SOLD" && car.status !== "ARCHIVED";
+  return {
+    pickerl: pickerlNeedsAttention(car, new Date(now)),
+    noPhoto: active && car.files.filter((f) => f.kind === "PHOTO").length === 0,
+    noDocs: active && requiredDocs(car, presentDocs).some((d) => !d.present),
+    age: active ? carAgeDays(car, now) : 0,
+  };
+};
+
 // ─── Гарантийные случаи (§19) ───────────────────────────────────
 
 export const WARRANTY_STATUS: Record<string, { label: string; cls: string }> = {

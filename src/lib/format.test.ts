@@ -23,6 +23,7 @@ import {
   viennaDayKey,
   isWarrantyOpen,
   WARRANTY_OPEN_STATUSES,
+  carAgeDays,
 } from "./format";
 import { Decimal } from "./finance";
 
@@ -377,5 +378,19 @@ describe("Открытые гарантийные случаи (§19)", () => {
   });
   it("WARRANTY_OPEN_STATUSES — 5 рабочих статусов", () => {
     expect(WARRANTY_OPEN_STATUSES).toHaveLength(5);
+  });
+});
+
+describe("Возраст авто на складе (§5.5)", () => {
+  const NOW = new Date("2026-07-26T12:00:00").getTime();
+  const base = (o) => ({ arrivalDate: null, purchaseDate: null, createdAt: new Date("2026-07-26T12:00:00"), ...o });
+  it("считает от arrivalDate в первую очередь", () => {
+    expect(carAgeDays(base({ arrivalDate: new Date("2026-06-26T12:00:00"), purchaseDate: new Date("2026-01-01") }), NOW)).toBe(30);
+  });
+  it("без arrivalDate — от purchaseDate", () => {
+    expect(carAgeDays(base({ purchaseDate: new Date("2026-05-27T12:00:00") }), NOW)).toBe(60);
+  });
+  it("без обеих — от createdAt (0 дней)", () => {
+    expect(carAgeDays(base({}), NOW)).toBe(0);
   });
 });
