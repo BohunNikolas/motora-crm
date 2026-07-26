@@ -50,7 +50,7 @@ export default async function LoginPage({
               autoComplete="username"
               autoFocus
               className="field"
-              placeholder="ivan@motorhof.local"
+              placeholder="vorname@motorhof.local"
             />
           </div>
           <div>
