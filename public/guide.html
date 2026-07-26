@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚗</text></svg>">
+</head><body>
+<title>MOTORHOF CRM — обзор системы</title>
+<style>
+  :root {
+    --bg: #0a0b0d; --panel: #131417; --panel-2: #191b1f; --line: #26282e; --line-2: #34373f;
+    --ink: #f6f3f2; --muted: #9a9ba1; --faint: #6c6e75; --accent: #f6f3f2;
+    --green: #5fb87a; --green-d: rgba(95,184,122,0.14);
+    --amber: #f2a33c; --amber-d: rgba(242,163,60,0.15);
+    --blue: #6ea8fe; --blue-d: rgba(110,168,254,0.15);
+    --red: #e5686b; --red-d: rgba(229,104,107,0.15);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f3f2; --panel: #ffffff; --panel-2: #f2efee; --line: #e4dfdd; --line-2: #d3cdca;
+      --ink: #24262a; --muted: #6b6560; --faint: #9a938d; --accent: #3b3f42;
+      --green: #3d9960; --green-d: rgba(61,153,96,0.12); --amber: #c8801f; --amber-d: rgba(200,128,31,0.13);
+      --blue: #3f74d6; --blue-d: rgba(63,116,214,0.12); --red: #cc4c4f; --red-d: rgba(204,76,79,0.12);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0a0b0d; --panel: #131417; --panel-2: #191b1f; --line: #26282e; --line-2: #34373f;
+    --ink: #f6f3f2; --muted: #9a9ba1; --faint: #6c6e75; --accent: #f6f3f2;
+    --green: #5fb87a; --green-d: rgba(95,184,122,0.14); --amber: #f2a33c; --amber-d: rgba(242,163,60,0.15);
+    --blue: #6ea8fe; --blue-d: rgba(110,168,254,0.15); --red: #e5686b; --red-d: rgba(229,104,107,0.15);
+  }
+  :root[data-theme="light"] {
+    --bg: #f6f3f2; --panel: #ffffff; --panel-2: #f2efee; --line: #e4dfdd; --line-2: #d3cdca;
+    --ink: #24262a; --muted: #6b6560; --faint: #9a938d; --accent: #3b3f42;
+    --green: #3d9960; --green-d: rgba(61,153,96,0.12); --amber: #c8801f; --amber-d: rgba(200,128,31,0.13);
+    --blue: #3f74d6; --blue-d: rgba(63,116,214,0.12); --red: #cc4c4f; --red-d: rgba(204,76,79,0.12);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans);
+    -webkit-font-smoothing: antialiased; line-height: 1.55; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1, h2, h3 { text-wrap: balance; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .hero { padding: 20px 0 34px; border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 13px; margin-bottom: 26px; }
+  .logo { width: 42px; height: 42px; border-radius: 11px; background: var(--ink); color: var(--bg);
+    display: grid; place-items: center; font-weight: 800; font-size: 20px; letter-spacing: -1px; }
+  .brand-name { font-weight: 750; font-size: 15px; letter-spacing: 0.5px; }
+  .brand-sub { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 1px; }
+  .hero h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 800; letter-spacing: -1.5px; line-height: 1.05; margin: 0 0 14px; }
+  .hero p { font-size: 16px; color: var(--muted); max-width: 60ch; margin: 0; }
+  .hero .metas { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 26px; }
+  .meta .n { font-family: var(--mono); font-size: 26px; font-weight: 700; letter-spacing: -1px; }
+  .meta .l { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  section { padding-top: 44px; }
+  .eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.6px; color: var(--accent); }
+  section h2 { font-size: clamp(21px, 3vw, 26px); font-weight: 750; letter-spacing: -0.6px; margin: 10px 0 6px; }
+  .lead { font-size: 14.5px; color: var(--muted); max-width: 64ch; margin: 0 0 22px; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+
+  .value { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .vcard { padding: 22px 20px; }
+  .vcard .ic { color: var(--accent); margin-bottom: 13px; }
+  .vcard h3 { font-size: 15.5px; font-weight: 650; margin: 0 0 6px; }
+  .vcard p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.5; }
+
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 13px; }
+  .card { padding: 18px 20px; }
+  .card .top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .card .ic { color: var(--accent); flex-shrink: 0; }
+  .card h3 { font-size: 15px; font-weight: 650; margin: 0; }
+  .card p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.5; }
+
+  .anatomy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }
+  .bit { padding: 15px 16px; }
+  .bit h4 { font-size: 13.5px; font-weight: 650; margin: 0 0 4px; }
+  .bit p { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.45; }
+  .bit .de { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+
+  /* Dashboard preview */
+  .dash { padding: 22px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .kpi { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 15px; }
+  .kpi .l { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--muted); }
+  .kpi .v { font-family: var(--mono); font-size: 21px; font-weight: 700; letter-spacing: -0.5px; margin-top: 6px; }
+  .kpi .v.acc { color: var(--green); }
+  .kpi .s { font-size: 11px; color: var(--faint); margin-top: 3px; }
+  .dash-note { font-size: 12.5px; color: var(--muted); margin: 4px 0 0; }
+
+  .glossary { display: flex; flex-direction: column; gap: 2px; }
+  .term { display: grid; grid-template-columns: 190px 1fr; gap: 18px; padding: 13px 4px; border-bottom: 1px solid var(--line); }
+  .term:last-child { border-bottom: none; }
+  .term dt { font-weight: 650; font-size: 14px; }
+  .term dt .ru { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+  .term dd { margin: 0; font-size: 13.5px; color: var(--muted); }
+
+  .try { display: flex; flex-direction: column; gap: 11px; }
+  .scn { display: flex; gap: 15px; padding: 17px 20px; }
+  .scn .k { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent); flex-shrink: 0; width: 22px; }
+  .scn h3 { font-size: 14.5px; font-weight: 650; margin: 0 0 3px; }
+  .scn p { font-size: 13px; color: var(--muted); margin: 0; }
+  .scn p .tag { color: var(--ink); font-weight: 600; }
+
+  .access { display: flex; flex-wrap: wrap; gap: 26px; align-items: center; padding: 24px 26px; }
+  .access .field { flex: 1; min-width: 180px; }
+  .access .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); font-weight: 650; }
+  .access .val { font-family: var(--mono); font-size: 15px; margin-top: 5px; }
+  .access .val a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line-2); }
+
+  footer { margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); }
+
+  @media (max-width: 680px) {
+    .value, .grid, .anatomy, .kpis { grid-template-columns: 1fr; }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .term { grid-template-columns: 1fr; gap: 3px; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="brand">
+      <div class="logo">MH</div>
+      <div>
+        <div class="brand-name">MOTORHOF</div>
+        <div class="brand-sub">CRM автосалона · Австрия</div>
+      </div>
+    </div>
+    <h1>Обзор системы управления салоном</h1>
+    <p>Единая система, которая ведёт каждый автомобиль от закупки до продажи и гарантии — с корректным австрийским учётом и полной картиной бизнеса в реальном времени.</p>
+    <div class="metas">
+      <div class="meta"><div class="n mono">8</div><div class="l">разделов</div></div>
+      <div class="meta"><div class="n mono">1</div><div class="l">полный цикл авто</div></div>
+      <div class="meta"><div class="n mono">EUR</div><div class="l">de-AT, налоги AT</div></div>
+    </div>
+  </header>
+
+  <section>
+    <div class="eyebrow">Зачем система</div>
+    <h2>Что она даёт бизнесу</h2>
+    <div class="value">
+      <div class="panel vcard">
+        <svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+        <h3>Полная картина</h3>
+        <p>Склад, продажи, маржа и расходы — в одном месте и в реальном времени. Видно, сколько машин в работе, что продано за месяц и какой результат.</p>
+      </div>
+      <div class="panel vcard">
+        <svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <h3>Порядок в процессах</h3>
+        <p>Каждая машина, клиент, термин и задача учтены. Ничего не теряется: система сама подсказывает, что требует внимания сегодня.</p>
+      </div>
+      <div class="panel vcard">
+        <svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        <h3>Корректный учёт AT</h3>
+        <p>Австрийское налогообложение (Differenzbesteuerung, Pickerl, Gewährleistung) заложено в систему. Меньше ручной работы и меньше риска ошибок.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Что внутри</div>
+    <h2>Восемь разделов</h2>
+    <p class="lead">Единое меню слева. Порядок повторяет рабочий день — от общей картины к деталям.</p>
+    <div class="grid">
+      <div class="panel card"><div class="top"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><h3>Дашборд</h3></div><p>Сводка дня: ключевые цифры, статусы склада, ближайшие просмотры, задачи и блок «Требует внимания». Всё кликабельно.</p></div>
+      <div class="panel card"><div class="top"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 11l1.8-4.5A2 2 0 0 1 8.7 5h6.6a2 2 0 0 1 1.9 1.5L19 11"/><path d="M3 16v-3a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3"/><circle cx="7" cy="16.5" r="1.7"/><circle cx="17" cy="16.5" r="1.7"/></svg><h3>Автомобили</h3></div><p>Сердце системы. Склад, глубокая карточка машины, экономика, продажа и бронь. Подробнее — ниже.</p></div>
+      <div class="panel card"><div class="top"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg><h3>Расходы</h3></div><p>Все затраты: подготовка, сервис, транспорт, аукцион. Netto/USt считаются автоматически, расход по машине входит в её себестоимость.</p></div>
+      <div class="panel card"><div class="top"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg><h3>Клиенты</h3></div><p>Покупатели и продавцы. На карточке — купленные авто, брони, термины и гарантийные случаи клиента в одном месте.</p></div>
+      <div class="panel card"><div class="top"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><h3>Задачи</h3></div><p>Кто, что и к какому сроку. Приоритеты, статусы, срезы «сегодня / просроченные». Задача заводится прямо из карточки авто.</p></div>
+      <div class="panel card"><div class="top"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><h3>Календарь</h3></div><p>Осмотры, тест-драйвы и выдачи. Месяц / неделя / день / список. Система не даст назначить двойную запись на сотрудника или машину.</p></div>
+      <div class="panel card"><div class="top"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg><h3>Гарантия</h3></div><p>Gewährleistungsfälle по проданным авто: жалоба, диагноз, решение, стоимость. Связывается с задачами и расходами по случаю.</p></div>
+      <div class="panel card"><div class="top"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5L4 11a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/></svg><h3>Настройки</h3></div><p>Управление системой: сотрудники и параметры салона.</p></div>
+      <div class="panel card"><div class="top"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg><h3>Финансовая логика</h3></div><p>Себестоимость, маржа и налоги считаются в одном месте по австрийским формулам — цифры на всех экранах всегда сходятся.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Сердце системы</div>
+    <h2>Карточка автомобиля</h2>
+    <p class="lead">Всё об одной машине на одной странице — вот из чего она состоит, сверху вниз.</p>
+    <div class="anatomy">
+      <div class="panel bit"><h4>Характеристики</h4><p>Марка, год, пробег, VIN, ключи, владельцы. Учётный код <span class="mono">MH-0001</span> и место на стоянке.</p></div>
+      <div class="panel bit"><h4>Техкарта <span class="de">§8</span></h4><p>Serviceheft, перекрасы кузова, <span class="mono">Pickerl</span> (техосмотр §57a) — со сроком и напоминанием.</p></div>
+      <div class="panel bit"><h4>Фото и документы</h4><p>Галерея снимков и чеклист обязательных бумаг — что загружено, чего не хватает.</p></div>
+      <div class="panel bit"><h4>Расходы на подготовку</h4><p>Список затрат по машине. Каждый расход тут же пересчитывает себестоимость и маржу.</p></div>
+      <div class="panel bit"><h4>Экономика</h4><p>Закупка → расходы → себестоимость → цена → <b>маржа</b>, с австрийским НДС. Результат по каждой машине.</p></div>
+      <div class="panel bit"><h4>Канал закупки <span class="de">§11</span></h4><p>Privat, Auktion, Händler, Inzahlungnahme, Import — свои поля и расчёты под каждый.</p></div>
+      <div class="panel bit"><h4>Владелец <span class="de">§9</span></h4><p>Своё авто или партнёрское (e.U.→OG) с внутренним счётом и раздельным результатом компаний.</p></div>
+      <div class="panel bit"><h4>Продажа и бронь <span class="de">§18</span></h4><p>Бронь с задатком → продажа. Маржа «замораживается» на момент сделки и потом не плывёт.</p></div>
+      <div class="panel bit"><h4>Статус и стоянка</h4><p>8 складских статусов и парковочное место. Продажа автоматически освобождает место.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Картина бизнеса</div>
+    <h2>Дашборд показывает результат</h2>
+    <p class="lead">Открыв систему, вы сразу видите главные цифры салона за месяц — без выгрузок и Excel.</p>
+    <div class="panel dash">
+      <div class="kpis">
+        <div class="kpi"><div class="l">Активный склад</div><div class="v">10</div><div class="s">на € 158.100</div></div>
+        <div class="kpi"><div class="l">Продано за месяц</div><div class="v">2</div><div class="s">выручка € 42.400</div></div>
+        <div class="kpi"><div class="l">Маржа за месяц</div><div class="v acc">€ 6.100</div><div class="s">14% от выручки</div></div>
+        <div class="kpi"><div class="l">Требует внимания</div><div class="v">4</div><div class="s">Pickerl, документы</div></div>
+      </div>
+      <p class="dash-note">Цифры — пример. Каждый показатель кликабелен и открывает нужный список: скажем, «Требует внимания» покажет именно те машины, где подходит Pickerl или не хватает документов.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Австрийская специфика</div>
+    <h2>Учёт по местным правилам</h2>
+    <p class="lead">Немецкие термины оставлены как в жизни салона — так их проще сверять с документами и бухгалтерией.</p>
+    <dl class="panel glossary" style="padding: 6px 20px;">
+      <div class="term"><dt>Differenzbesteuerung<span class="ru">налог с разницы</span></dt><dd>НДС только с наценки (продажа − закупка), а не со всей суммы. Обычный режим для б/у авто.</dd></div>
+      <div class="term"><dt>Regelbesteuerung<span class="ru">обычный НДС</span></dt><dd>Классический НДС со всей суммы продажи. Второй возможный налоговый режим авто.</dd></div>
+      <div class="term"><dt>Pickerl / §57a<span class="ru">техосмотр</span></dt><dd>Обязательный техосмотр. Система следит за сроком и сама заводит задачу, когда он подходит.</dd></div>
+      <div class="term"><dt>Gewährleistung<span class="ru">гарантия</span></dt><dd>Законная гарантия по проданному авто. Ведётся отдельными случаями со статусами и стоимостью.</dd></div>
+      <div class="term"><dt>e.U. → OG<span class="ru">внутр. продажа</span></dt><dd>Авто партнёра продаётся внутри в MOTORHOF OG по внутреннему счёту. Результаты компаний считаются раздельно.</dd></div>
+      <div class="term"><dt>Auktion / Händler<span class="ru">каналы закупки</span></dt><dd>Способы приобретения авто (аукцион, дилер, трейд-ин, импорт) — у каждого свои поля и расчёт стоимости.</dd></div>
+    </dl>
+  </section>
+
+  <section>
+    <div class="eyebrow">Знакомство</div>
+    <h2>Что посмотреть в первую очередь</h2>
+    <p class="lead">Несколько мест, которые лучше всего показывают систему в деле. Данные учебные — смотрите свободно.</p>
+    <div class="try">
+      <div class="panel scn"><div class="k mono">1</div><div><h3>Дашборд</h3><p>Начните здесь: цифры месяца и блок <span class="tag">«Требует внимания»</span> с одного взгляда показывают состояние салона.</p></div></div>
+      <div class="panel scn"><div class="k mono">2</div><div><h3>Карточка автомобиля</h3><p>Откройте любую машину, например <span class="tag">VW Golf</span> — вся история, экономика и документы собраны на одной странице.</p></div></div>
+      <div class="panel scn"><div class="k mono">3</div><div><h3>Календарь</h3><p>Посмотрите неделю просмотров и тест-драйвов. Попробуйте создать термин на занятое время — система <span class="tag">предупредит о пересечении</span>.</p></div></div>
+      <div class="panel scn"><div class="k mono">4</div><div><h3>Гарантия</h3><p>Раздел показывает, как салон ведёт послепродажные случаи по проданным авто — от жалобы до решения.</p></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Доступ</div>
+    <h2>Как войти</h2>
+    <p class="lead">Демо-доступ к системе. Данные учебные и обезличенные — смотрите свободно.</p>
+    <div class="panel access" style="flex-direction: column; align-items: stretch; gap: 20px;">
+      <div style="display: flex; flex-wrap: wrap; gap: 26px;">
+        <div class="field"><div class="lbl">Ссылка</div><div class="val"><a href="https://motora-crm.vercel.app">motora-crm.vercel.app</a></div></div>
+        <div class="field"><div class="lbl">Общий пароль</div><div class="val">motorhof2026</div></div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom: 9px;">Логины</div>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 26px;">
+          <div class="val" style="margin: 0;">ivan@motorhof.local</div>
+          <div class="val" style="margin: 0;">vitalik@motorhof.local</div>
+          <div class="val" style="margin: 0;">sergey@motorhof.local</div>
+          <div class="val" style="margin: 0;">sales@motorhof.local</div>
+          <div class="val" style="margin: 0;">autohub@motorhof.local</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    MOTORHOF CRM · обзор системы · интерфейс на русском, налоговые термины по-немецки (как в документах салона)
+  </footer>
+</div>
+</body></html>

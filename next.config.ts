@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "15mb",
     },
   },
+  // Публичный обзор системы (гид для партнёров): чистый URL /guide → статика.
+  async rewrites() {
+    return [{ source: "/guide", destination: "/guide.html" }];
+  },
 };
 
 export default nextConfig;

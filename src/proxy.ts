@@ -10,7 +10,7 @@ import type { NextRequest } from "next/server";
  */
 
 const SESSION_COOKIE = "mh_session";
-const PUBLIC_PATHS = ["/login", "/icon.svg"];
+const PUBLIC_PATHS = ["/login", "/icon.svg", "/guide", "/guide.html"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
