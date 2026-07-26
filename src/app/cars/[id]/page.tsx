@@ -35,8 +35,6 @@ import {
   PAYMENT_METHOD,
   SALE_CATEGORY,
   reservationExpired,
-  STAGE_LABEL,
-  DEAL_TYPE,
   TAX_SCHEME,
   CURRENT_OWNER,
   PURCHASE_CHANNEL,
@@ -81,7 +79,6 @@ export default async function CarPage({
     where: { id },
     include: {
       expenses: { where: { cancelled: false }, orderBy: { date: "desc" } },
-      deals: { include: { client: true }, orderBy: { createdAt: "desc" } },
       parkingMoves: { orderBy: { movedAt: "desc" }, take: 6 },
       files: { orderBy: { createdAt: "asc" } },
       sales: { include: { client: true, employee: true }, orderBy: { createdAt: "desc" } },
@@ -727,37 +724,6 @@ export default async function CarPage({
           </section>
           )}
 
-          {can(user, "see.deals") && (
-          <section className="panel animate-in delay-3 p-5">
-            <h2 className="mb-4 text-[15px] font-bold">Сделки по этому авто</h2>
-            {car.deals.length === 0 ? (
-              <p className="text-[13px] text-muted">Сделок пока нет.</p>
-            ) : (
-              <div className="flex flex-col">
-                {car.deals.map((d) => (
-                  <Link
-                    key={d.id}
-                    href="/deals"
-                    className="flex items-center justify-between border-b border-line py-2.5 last:border-none hover:bg-white/[0.02]"
-                  >
-                    <div>
-                      <div className="text-[14px] font-semibold">{d.client.name}</div>
-                      <div className="text-[12px] text-muted">
-                        {DEAL_TYPE[d.type]} · {fmtDate(d.createdAt)}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {d.amount != null && <span className="mono text-[13px]">{fmtMoney(d.amount)}</span>}
-                      <span className={`chip ${d.stage === "LOST" ? "chip-red" : d.stage === "DONE" ? "chip-green" : "chip-blue"}`}>
-                        {STAGE_LABEL[d.stage] ?? d.stage}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
-          )}
         </div>
 
         <div className="flex flex-col gap-4">

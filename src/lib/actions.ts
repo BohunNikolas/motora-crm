@@ -7,7 +7,6 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { putObject, deleteObject } from "./storage";
 import {
-  DEAL_STAGES,
   CAR_STATUS_ORDER,
   SALES_STATUS_SET,
   TECH_STATUS_SET,
@@ -75,7 +74,7 @@ const date = (fd: FormData, key: string): Date | null => {
 };
 
 function revalidateAll() {
-  for (const p of ["/", "/cars", "/clients", "/deals", "/tasks"]) revalidatePath(p);
+  for (const p of ["/", "/cars", "/clients", "/tasks"]) revalidatePath(p);
 }
 
 // ─── Автомобили ────────────────────────────────────────────────
@@ -824,75 +823,10 @@ export async function deleteClient(id: string) {
   redirect("/clients");
 }
 
-// ─── Сделки ────────────────────────────────────────────────────
-
-export async function createDeal(fd: FormData) {
-  const user = await requireCan("sell");
-  const clientId = str(fd, "clientId");
-  if (!clientId) return;
-  const deal = await prisma.deal.create({
-    data: {
-      clientId,
-      carId: str(fd, "carId"),
-      type: str(fd, "type") ?? "SALE",
-      amount: money(fd, "amount"),
-      notes: str(fd, "notes"),
-      stage: "NEW",
-    },
-  });
-  await audit(user.id, "Deal", deal.id, "create", {
-    after: { clientId, carId: deal.carId, amount: deal.amount?.toString() },
-  });
-  revalidateAll();
-}
-
-// Deal — воронка ЛИДОВ (§17), НЕ источник продажи. С фазы 3e статус авто и маржа
-// идут через Sale (§18): движение сделки по воронке НЕ меняет статус авто.
-export async function moveDealStage(id: string, dir: 1 | -1) {
-  const user = await requireCan("sell");
-  const deal = await prisma.deal.findUnique({ where: { id } });
-  if (!deal) return;
-  const order = DEAL_STAGES.map((s) => s.key);
-  const idx = order.indexOf(deal.stage);
-  // LOST не входит в воронку (idx === -1): стрелка утащила бы сделку в NEW молча.
-  if (idx === -1) return;
-  const next = order[Math.min(Math.max(idx + dir, 0), order.length - 1)];
-  if (next === deal.stage) return;
-
-  await prisma.deal.update({
-    where: { id },
-    data: { stage: next, closedAt: next === "DONE" ? new Date() : null },
-  });
-  await audit(user.id, "Deal", id, "stage", { before: { stage: deal.stage }, after: { stage: next } });
-  revalidateAll();
-}
-
-export async function loseDeal(id: string) {
-  const user = await requireCan("sell");
-  const deal = await prisma.deal.findUnique({ where: { id } });
-  if (!deal) return;
-  await prisma.deal.update({ where: { id }, data: { stage: "LOST", closedAt: new Date() } });
-  await audit(user.id, "Deal", id, "lose", { before: { stage: deal.stage } });
-  revalidateAll();
-}
-
-/** Вернуть потерянную сделку в работу — в начало воронки. */
-export async function reopenDeal(id: string) {
-  const user = await requireCan("sell");
-  await prisma.deal.update({ where: { id }, data: { stage: "NEW", closedAt: null } });
-  await audit(user.id, "Deal", id, "reopen");
-  revalidateAll();
-}
-
-export async function deleteDeal(id: string) {
-  const user = await requireCan("delete.any");
-  const before = await prisma.deal.findUnique({ where: { id } });
-  await prisma.deal.delete({ where: { id } });
-  await audit(user.id, "Deal", id, "delete", {
-    before: before ? { stage: before.stage, amount: before.amount?.toString() } : undefined,
-  });
-  revalidateAll();
-}
+// ─── Сделки (§17) ──────────────────────────────────────────────
+// UI воронки Deal удалён в фазе 5c (§4). Модель Deal и её данные оставлены как
+// legacy (безопасная миграция позже); server-actions создания/движения сделок
+// убраны — управлять ими из интерфейса больше нельзя.
 
 // ─── Задачи (§15) ──────────────────────────────────────────────
 
