@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { putObject, deleteObject } from "./storage";
 import {
@@ -12,6 +13,9 @@ import {
   TECH_STATUS_SET,
   SALE_FLOW_STATUSES,
   TASK_OPEN_STATUSES,
+  APPOINTMENT_BLOCKING_STATUSES,
+  fmtDateTime,
+  fmtTime,
   pickerlNeedsAttention,
   isPartnerOwner,
   internalInvoiceComplete,
@@ -965,4 +969,106 @@ export async function cancelTask(id: string) {
   await audit(user.id, "Task", id, "cancel", { before: { title: t.title } });
   revalidatePath("/tasks");
   revalidatePath("/");
+}
+
+// ─── Календарь (§16) ───────────────────────────────────────────
+
+// datetime-local отдаёт «2026-07-26T14:30» без пояса — трактуем как настенное
+// время (согласовано с показом, §16). Возврат null, если поле пустое.
+const dateTime = (fd: FormData, key: string): Date | null => {
+  const v = str(fd, key);
+  return v ? new Date(v) : null;
+};
+
+/**
+ * Проверка пересечений термина (§16.3), server-side. Занятость создаёт тот же
+ * сотрудник ИЛИ то же авто; отменённые (ABGESAGT) не блокируют. Возвращает
+ * первый конфликтующий термин или null. Полуоткрытые интервалы: касание границами — ок.
+ */
+async function findAppointmentConflict(
+  startAt: Date,
+  endAt: Date,
+  employeeId: string | null,
+  carId: string | null,
+  selfId?: string
+) {
+  const or: Prisma.AppointmentWhereInput[] = [];
+  if (employeeId) or.push({ employeeId });
+  if (carId) or.push({ carId });
+  if (or.length === 0) return null; // без сотрудника и авто конфликтовать нечему
+
+  return prisma.appointment.findFirst({
+    where: {
+      ...(selfId ? { id: { not: selfId } } : {}),
+      status: { in: APPOINTMENT_BLOCKING_STATUSES },
+      startAt: { lt: endAt }, // пересечение полуоткрытых интервалов
+      endAt: { gt: startAt },
+      OR: or,
+    },
+    include: { employee: { select: { name: true } }, car: { select: { make: true, model: true, mhNumber: true } } },
+  });
+}
+
+function appointmentDataFromForm(fd: FormData) {
+  const startAt = dateTime(fd, "startAt");
+  const endAt = dateTime(fd, "endAt");
+  if (!startAt || !endAt) throw new Error("Укажите начало и конец термина");
+  if (endAt.getTime() <= startAt.getTime()) throw new Error("Конец термина должен быть позже начала");
+  const clientId = str(fd, "clientId");
+  return {
+    startAt,
+    endAt,
+    clientId,
+    clientName: str(fd, "clientName") ?? "—", // снимок имени (§16.1)
+    phone: str(fd, "phone"),
+    carId: str(fd, "carId"),
+    employeeId: str(fd, "employeeId"),
+    type: str(fd, "type") ?? "BESICHTIGUNG",
+    result: str(fd, "result"),
+    reminderMinutesBefore: num(fd, "reminderMinutesBefore"),
+    comment: str(fd, "comment"),
+  };
+}
+
+// Текст конфликта для пользователя (§16.3): что именно занято и когда.
+function conflictMessage(
+  c: { startAt: Date; endAt: Date; clientName: string; employee: { name: string } | null; car: { make: string; model: string; mhNumber: number } | null },
+  sameEmployee: boolean
+): string {
+  const who = sameEmployee && c.employee ? `Сотрудник ${c.employee.name}` : c.car ? `Авто ${c.car.make} ${c.car.model} (MH-${String(c.car.mhNumber).padStart(4, "0")})` : "Ресурс";
+  return `${who} уже занят: ${fmtDateTime(c.startAt)}–${fmtTime(c.endAt)} (клиент ${c.clientName}). Выберите другое время.`;
+}
+
+export async function createAppointment(fd: FormData) {
+  const user = await requireCan("task.manage");
+  const data = appointmentDataFromForm(fd);
+  const conflict = await findAppointmentConflict(data.startAt, data.endAt, data.employeeId, data.carId);
+  if (conflict) throw new Error(conflictMessage(conflict, conflict.employeeId === data.employeeId));
+
+  const appt = await prisma.appointment.create({ data: { ...data, status: "GEPLANT", createdById: user.id } });
+  await audit(user.id, "Appointment", appt.id, "create", {
+    after: { clientName: appt.clientName, type: appt.type, startAt: appt.startAt.toISOString(), carId: appt.carId, employeeId: appt.employeeId },
+  });
+  revalidatePath("/calendar");
+  redirect("/calendar");
+}
+
+export async function updateAppointment(id: string, fd: FormData) {
+  const user = await requireCan("task.manage");
+  const data = appointmentDataFromForm(fd);
+  const conflict = await findAppointmentConflict(data.startAt, data.endAt, data.employeeId, data.carId, id);
+  if (conflict) throw new Error(conflictMessage(conflict, conflict.employeeId === data.employeeId));
+
+  await prisma.appointment.update({ where: { id }, data });
+  await audit(user.id, "Appointment", id, "update", { after: { startAt: data.startAt.toISOString(), type: data.type } });
+  revalidatePath("/calendar");
+  redirect("/calendar");
+}
+
+/** Сменить статус термина (§16.1): подтверждён / пришёл / отменён / не пришёл. */
+export async function setAppointmentStatus(id: string, status: string) {
+  const user = await requireCan("task.manage");
+  await prisma.appointment.update({ where: { id }, data: { status } });
+  await audit(user.id, "Appointment", id, "status", { after: { status } });
+  revalidatePath("/calendar");
 }

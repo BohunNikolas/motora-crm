@@ -19,6 +19,8 @@ import {
   auctionTotalBelowVehiclePrice,
   buildSaleSnapshot,
   reservationExpired,
+  intervalsOverlap,
+  viennaDayKey,
 } from "./format";
 import { Decimal } from "./finance";
 
@@ -327,5 +329,37 @@ describe("Активные статусы склада (§6.1)", () => {
   it("ACTIVE_STATUSES содержит 7 статусов (8 минус SOLD)", () => {
     expect(ACTIVE_STATUSES).toHaveLength(7);
     expect(ACTIVE_STATUSES).not.toContain("SOLD");
+  });
+});
+
+describe("Пересечение интервалов календаря (§16.3, §24.4)", () => {
+  const d = (s: string) => new Date(`2026-07-26T${s}:00`);
+
+  it("частичное пересечение — конфликт", () => {
+    expect(intervalsOverlap(d("14:00"), d("15:00"), d("14:30"), d("15:30"))).toBe(true);
+  });
+  it("один интервал внутри другого — конфликт", () => {
+    expect(intervalsOverlap(d("14:00"), d("16:00"), d("14:30"), d("15:00"))).toBe(true);
+  });
+  it("полное совпадение — конфликт", () => {
+    expect(intervalsOverlap(d("14:00"), d("15:00"), d("14:00"), d("15:00"))).toBe(true);
+  });
+  it("касание границами (конец = начало) — НЕ конфликт", () => {
+    expect(intervalsOverlap(d("14:00"), d("15:00"), d("15:00"), d("16:00"))).toBe(false);
+    expect(intervalsOverlap(d("15:00"), d("16:00"), d("14:00"), d("15:00"))).toBe(false);
+  });
+  it("полностью раздельные — НЕ конфликт", () => {
+    expect(intervalsOverlap(d("14:00"), d("15:00"), d("16:00"), d("17:00"))).toBe(false);
+  });
+});
+
+describe("Ключ календарного дня в Вене (§16.2)", () => {
+  it("группирует по календарному дню Вены", () => {
+    // 26.07.2026 12:00 UTC = 14:00 Вена (CEST) — тот же день.
+    expect(viennaDayKey(new Date("2026-07-26T12:00:00Z"))).toBe("2026-07-26");
+  });
+  it("поздний вечер UTC уже следующий день в Вене летом", () => {
+    // 26.07 22:30 UTC = 27.07 00:30 Вена (CEST +2).
+    expect(viennaDayKey(new Date("2026-07-26T22:30:00Z"))).toBe("2026-07-27");
   });
 });

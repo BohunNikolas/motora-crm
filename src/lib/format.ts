@@ -427,6 +427,55 @@ export const TASK_STATUS_ORDER = Object.keys(TASK_STATUS);
 // Активные (не завершённые и не отменённые) — для счётчиков «Требует внимания» и автозакрытия.
 export const TASK_OPEN_STATUSES = ["OPEN", "IN_PROGRESS", "BLOCKED"];
 
+// ─── Календарь (§16) ────────────────────────────────────────────
+
+export const APPOINTMENT_TYPE: Record<string, string> = {
+  BESICHTIGUNG: "Осмотр",
+  PROBEFAHRT: "Тест-драйв",
+  ABHOLUNG: "Выдача",
+};
+export const APPOINTMENT_TYPE_ORDER = Object.keys(APPOINTMENT_TYPE);
+
+export const APPOINTMENT_STATUS: Record<string, { label: string; cls: string }> = {
+  GEPLANT: { label: "Запланирован", cls: "chip-blue" },
+  BESTAETIGT: { label: "Подтверждён", cls: "chip-amber" },
+  ERSCHIENEN: { label: "Пришёл", cls: "chip-green" },
+  ABGESAGT: { label: "Отменён", cls: "chip-muted" },
+  NICHT_ERSCHIENEN: { label: "Не пришёл", cls: "chip-red" },
+};
+export const APPOINTMENT_STATUS_ORDER = Object.keys(APPOINTMENT_STATUS);
+// Отменённые термины не блокируют интервал (§16.3) — остальные статусы занимают ресурс.
+export const APPOINTMENT_BLOCKING_STATUSES = APPOINTMENT_STATUS_ORDER.filter((s) => s !== "ABGESAGT");
+
+/**
+ * Пересекаются ли два полуоткрытых интервала [aStart, aEnd) и [bStart, bEnd).
+ * Касание границами (конец одного = начало другого) конфликтом НЕ считается (§16.3).
+ * Чистая функция — покрыта тестами §24.4.
+ */
+export const intervalsOverlap = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean =>
+  aStart.getTime() < bEnd.getTime() && bStart.getTime() < aEnd.getTime();
+
+// Время/дата в часовом поясе Вены (независимо от TZ сервера — важно на проде UTC).
+const viennaDayFmt = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Europe/Vienna",
+});
+const viennaTimeFmt = new Intl.DateTimeFormat("de-AT", {
+  hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Vienna",
+});
+
+/** Ключ календарного дня в Вене: «2026-07-26». Для группировки терминов по дням. */
+export const viennaDayKey = (d: Date | string) => viennaDayFmt.format(new Date(d));
+/** Время термина в Вене: «14:30». */
+export const fmtTime = (d: Date | string) => viennaTimeFmt.format(new Date(d));
+/** Дата+время: «26.07.2026 14:30». */
+export const fmtDateTime = (d: Date | string) => `${fmtDate(d)} ${fmtTime(d)}`;
+
+export const WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+export const MONTHS_RU = [
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+];
+
 // ─── Бронь и продажа (§18) ──────────────────────────────────────
 
 // Статусы, которые ставятся ТОЛЬКО через поток брони/продажи (§18), а не прямой

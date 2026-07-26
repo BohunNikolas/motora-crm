@@ -126,6 +126,7 @@ model Car {
   tasks         Task[]
   files         CarFile[]
   sales         Sale[]
+  appointments  Appointment[]
 }
 
 // Бронь и продажа автомобиля (§18). Единый жизненный цикл: RESERVED → COMPLETED
@@ -264,6 +265,8 @@ model User {
   expenses     Expense[]
   assignedTasks Task[]  @relation("TaskAssignee")
   createdTasks  Task[]  @relation("TaskCreator")
+  appointmentsAsEmployee Appointment[] @relation("AppointmentEmployee")
+  appointmentsCreated    Appointment[] @relation("AppointmentCreator")
 }
 
 model Session {
@@ -302,6 +305,7 @@ model Client {
   deals     Deal[]
   tasks     Task[]
   sales     Sale[]
+  appointments Appointment[]
 }
 
 model Deal {
@@ -345,4 +349,41 @@ model Task {
   assignedToUserId String?
   createdBy        User?   @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdById      String?
+
+  // Индексы под частые выборки на странице задач (§15.2). Созданы в миграции phase4b.
+  @@index([status])
+  @@index([assignedToUserId])
+  @@index([dueDate])
+}
+
+// Календарь просмотров (§16). Термин: осмотр / тест-драйв / выдача.
+model Appointment {
+  id         String   @id @default(cuid())
+  // Клиент: связь ИЛИ быстрое создание (§16.1). Имя/телефон — снимок на момент записи,
+  // чтобы термин оставался читаемым даже если клиента удалят/переименуют.
+  client     Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId   String?
+  clientName String
+  phone      String?
+  car        Car?     @relation(fields: [carId], references: [id], onDelete: SetNull)
+  carId      String?
+  employee   User?    @relation("AppointmentEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+  employeeId String?
+  startAt    DateTime
+  endAt      DateTime
+  type       String   @default("BESICHTIGUNG") // BESICHTIGUNG | PROBEFAHRT | ABHOLUNG
+  // GEPLANT | BESTAETIGT | ERSCHIENEN | ABGESAGT | NICHT_ERSCHIENEN. ABGESAGT не блокирует интервал (§16.3).
+  status     String   @default("GEPLANT")
+  result     String?
+  // Напоминание — только in-app (§16.3): поле хранится, внешних интеграций (SMS/email) нет.
+  reminderMinutesBefore Int?
+  comment    String?
+  createdBy   User?   @relation("AppointmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([startAt])
+  @@index([employeeId])
+  @@index([carId])
 }

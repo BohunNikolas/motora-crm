@@ -194,11 +194,25 @@ async function main() {
     ],
   });
 
+  // Термины календаря (§16). Время — «настенное» на ближайшие дни.
+  const at = (offset, hh, mm) => { const d = new Date(); d.setHours(hh, mm, 0, 0); d.setDate(d.getDate() + offset); return d; };
+  const emp = await p.user.findFirst({ where: { active: true } });
+  await p.appointment.createMany({
+    data: [
+      { clientName: andrey.name, phone: andrey.phone, clientId: andrey.id, carId: camry.id, employeeId: emp?.id, startAt: at(0, 10, 0), endAt: at(0, 10, 30), type: "BESICHTIGUNG", status: "BESTAETIGT" },
+      { clientName: sergey.name, phone: sergey.phone, clientId: sergey.id, carId: octavia.id, employeeId: emp?.id, startAt: at(0, 14, 0), endAt: at(0, 15, 0), type: "PROBEFAHRT", status: "GEPLANT" },
+      { clientName: viktor.name, phone: viktor.phone, clientId: viktor.id, carId: mazda.id, employeeId: emp?.id, startAt: at(1, 11, 0), endAt: at(1, 11, 45), type: "ABHOLUNG", status: "GEPLANT" },
+      { clientName: elena.name, phone: elena.phone, clientId: elena.id, carId: qashqai.id, startAt: at(2, 16, 0), endAt: at(2, 16, 30), type: "BESICHTIGUNG", status: "GEPLANT" },
+      { clientName: "Максим Гость", phone: "+43 660 1234567", startAt: at(-1, 9, 0), endAt: at(-1, 9, 30), type: "BESICHTIGUNG", status: "NICHT_ERSCHIENEN" },
+    ],
+  });
+
   console.log("Готово:");
   console.log("  авто:    ", await p.car.count());
   console.log("  клиенты: ", await p.client.count());
   console.log("  сделки:  ", await p.deal.count());
   console.log("  задачи:  ", await p.task.count());
+  console.log("  термины: ", await p.appointment.count());
 }
 
 main()
