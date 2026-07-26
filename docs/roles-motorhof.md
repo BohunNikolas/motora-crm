@@ -21,7 +21,7 @@ Email'ы — временные заглушки `@motorhof.local` (решени
 | Пользователь | Email (временный) | Роли |
 |---|---|---|
 | Иван | ivan@motorhof.local | ADMIN + PARTNER + SALES |
-| Vitaliy | vitalik@motorhof.local | PARTNER + SALES |
+| Vitaliy | vitaliy@motorhof.local | PARTNER + SALES |
 | Сергей | sergey@motorhof.local | PARTNER + TECHNICAL |
 | Наёмный продавец | sales@motorhof.local | SALES |
 | Работник AutoHub | autohub@motorhof.local | TECHNICAL |
