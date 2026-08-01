@@ -37,7 +37,7 @@ async function pickerlAskSuffix(
 }
 import { getSessionUser, audit } from "./auth";
 import { can, type AuthUser, type Capability } from "./authz";
-import { Decimal, splitGrossVat } from "./finance";
+import { Decimal, splitGrossVat, regelVat } from "./finance";
 
 /**
  * Обязательная server-side проверка прав в каждой мутации (roles-motorhof.md §1).
@@ -81,14 +81,28 @@ function revalidateAll() {
 
 // Общая сборка данных авто из формы. Деньги — строки для Decimal.
 // einkaufspreis24 по умолчанию = закупка, плановая цена = цена продажи (§22).
+/**
+ * Данные авто из формы (правки-1, Э3). Год не пишется (В5); цены — по новой
+ * модели канал×владелец×режим (П14): для Regel брутто/план считаются из НЕТТО,
+ * listPrice поддерживается = плановому брутто (его показывают списки/продажа).
+ */
 function carDataFromForm(fd: FormData) {
-  const purchasePrice = money(fd, "purchasePrice") ?? "0";
-  const listPrice = money(fd, "listPrice") ?? "0";
   const vinRaw = str(fd, "vin");
+  const channel = str(fd, "purchaseChannel") ?? "PRIVAT";
+  const taxScheme = str(fd, "taxScheme") === "REGELBESTEUERUNG" ? "REGELBESTEUERUNG" : "DIFFERENZBESTEUERUNG";
+
+  // План продажи: Diff — брутто из формы; Regel — НЕТТО из формы, брутто считается (В10).
+  const plannedNet = taxScheme === "REGELBESTEUERUNG" ? money(fd, "plannedSalePriceNet") : null;
+  const plannedGross =
+    taxScheme === "REGELBESTEUERUNG"
+      ? plannedNet != null
+        ? regelVat(plannedNet).gross.toString()
+        : null
+      : money(fd, "plannedSalePriceGross");
+
   return {
     make: str(fd, "make") ?? "—",
     model: str(fd, "model") ?? "—",
-    year: num(fd, "year") ?? new Date().getFullYear(),
     erstzulassung: date(fd, "erstzulassung"),
     mileage: num(fd, "mileage") ?? 0,
     vin: vinRaw ? vinRaw.toUpperCase() : null, // нормализация VIN (§8.1)
@@ -99,12 +113,13 @@ function carDataFromForm(fd: FormData) {
     voranmeldungen: num(fd, "voranmeldungen"),
     keysCount: num(fd, "keysCount"),
     purchaseDate: date(fd, "purchaseDate"),
-    // engineVol больше не в форме (§6.2), но поле в БД остаётся — не трогаем при апдейте.
-    purchasePrice,
-    listPrice,
+    // Закупочная: у Аукциона отдельного поля нет (финальная считается из
+    // цены аукциона + транспорта) — легаси-колонка NOT NULL, пишем 0.
+    purchasePrice: channel === "AUKTION" ? "0" : money(fd, "purchasePrice") ?? "0",
+    listPrice: plannedGross ?? "0",
     status: str(fd, "status") ?? "PURCHASED",
     notes: str(fd, "notes"),
-    // Serviceheft (§8.2)
+    // Serviceheft (§8.2): детали значимы только когда книга есть (В7).
     serviceheft: str(fd, "serviceheft") ?? "UNBEKANNT",
     lastServiceDate: date(fd, "lastServiceDate"),
     lastServiceMileage: num(fd, "lastServiceMileage"),
@@ -121,29 +136,25 @@ function carDataFromForm(fd: FormData) {
     pickerlMonth: num(fd, "pickerlMonth"),
     pickerlYear: num(fd, "pickerlYear"),
     pickerlComment: str(fd, "pickerlComment"),
-    // Налоги/закупка
-    taxScheme: str(fd, "taxScheme") ?? "DIFFERENZBESTEUERUNG",
-    // §11.2: для Auktion §24-Einkaufspreis по умолчанию = Fahrzeugpreis, а не invoiceTotal.
-    einkaufspreisGemaess24:
-      money(fd, "einkaufspreisGemaess24") ??
-      (str(fd, "purchaseChannel") === "AUKTION" ? money(fd, "auctionVehiclePrice") ?? purchasePrice : purchasePrice),
-    plannedSalePriceGross: money(fd, "plannedSalePriceGross") ?? listPrice,
+    // Налоги/цены (правки-1)
+    taxScheme,
+    plannedSalePriceGross: plannedGross,
+    plannedSalePriceNet: plannedNet,
     minimumSalePriceGross: money(fd, "minimumSalePriceGross"),
     arrivalDate: date(fd, "arrivalDate"),
-    // Владелец и внутренняя продажа e.U. → OG (§9). Партнёрские поля значимы только
-    // для Mriya/A Motors/AutoHub — для MOTORHOF_OG обнуляем, чтобы не смешивать данные.
     ...ownerDataFromForm(fd),
-    // Условные поля закупки по каналу (§11). Поля неактуальных каналов зануляются.
     ...channelDataFromForm(fd),
   };
 }
 
 /**
- * Условные поля закупки (§11). Возвращает purchaseChannel + поля выбранного канала;
- * поля остальных каналов — null/false, чтобы не смешивать данные разных каналов.
+ * Условные поля закупки (правки-1, В8): каналов три — Приват/Аукцион/Хендлер.
+ * Поля невыбранных каналов и легаси-каналов (трейд-ин/импорт) зануляются,
+ * чтобы не смешивать данные.
  */
 function channelDataFromForm(fd: FormData) {
-  const purchaseChannel = str(fd, "purchaseChannel");
+  const raw = str(fd, "purchaseChannel");
+  const purchaseChannel = raw === "AUKTION" || raw === "HAENDLER" ? raw : "PRIVAT";
   const empty = {
     auctionVehiclePrice: null, auctionFeeNet: null, auctionFeeVat: null,
     auctionTransportCost: null, auctionOtherFees: null, auctionInvoiceTotal: null,
@@ -161,103 +172,92 @@ function channelDataFromForm(fd: FormData) {
   if (purchaseChannel === "AUKTION") {
     return {
       purchaseChannel, ...empty,
-      auctionVehiclePrice: money(fd, "auctionVehiclePrice"),
-      auctionFeeNet: money(fd, "auctionFeeNet"),
-      auctionFeeVat: money(fd, "auctionFeeVat"),
-      auctionTransportCost: money(fd, "auctionTransportCost"),
-      auctionOtherFees: money(fd, "auctionOtherFees"),
-      auctionInvoiceTotal: money(fd, "auctionInvoiceTotal"),
-      auctionInvoiceNumber: str(fd, "auctionInvoiceNumber"),
+      auctionInvoiceTotal: money(fd, "auctionInvoiceTotal"),   // цена аукциона (общая)
+      auctionVehiclePrice: money(fd, "auctionVehiclePrice"),   // цена автомобиля (база НДС)
+      auctionTransportCost: money(fd, "auctionTransportCost"), // транспортировка
       auctionSupplier: str(fd, "auctionSupplier"),
-      auctionCountry: str(fd, "auctionCountry"),
     };
   }
   if (purchaseChannel === "HAENDLER") {
     return {
       purchaseChannel, ...empty,
       haendlerSupplier: str(fd, "haendlerSupplier"),
-      haendlerInvoiceNumber: str(fd, "haendlerInvoiceNumber"),
-      haendlerInvoiceDate: date(fd, "haendlerInvoiceDate"),
-      haendlerPurchaseNet: money(fd, "haendlerPurchaseNet"),
-      haendlerPurchaseVat: money(fd, "haendlerPurchaseVat"),
-      haendlerPurchaseGross: money(fd, "haendlerPurchaseGross"),
-      haendlerVorsteuerAusgewiesen: str(fd, "haendlerVorsteuerAusgewiesen") === "1",
     };
   }
-  if (purchaseChannel === "INZAHLUNGNAHME") {
-    return {
-      purchaseChannel, ...empty,
-      tradeInEstimatedValue: money(fd, "tradeInEstimatedValue"),
-      tradeInCreditValue: money(fd, "tradeInCreditValue"),
-      tradeInSurcharge: money(fd, "tradeInSurcharge"),
-      tradeInSurchargeBy: str(fd, "tradeInSurchargeBy"),
-    };
-  }
-  if (purchaseChannel === "IMPORT") {
-    return {
-      purchaseChannel, ...empty,
-      importCountry: str(fd, "importCountry"),
-      importZone: str(fd, "importZone"),
-      importCurrency: str(fd, "importCurrency")?.toUpperCase() ?? null,
-      importExchangeRate: money(fd, "importExchangeRate"),
-      importInvoiceAmount: money(fd, "importInvoiceAmount"),
-      importTransportCost: money(fd, "importTransportCost"),
-      importZoll: money(fd, "importZoll"),
-      importEust: money(fd, "importEust"),
-      importNova: money(fd, "importNova"),
-      importOtherCosts: money(fd, "importOtherCosts"),
-    };
-  }
-  // PRIVAT или канал не выбран — только базовые поля.
   return { purchaseChannel, ...empty };
 }
 
 /**
- * Поля владельца/внутреннего счёта (§9). Для собственных авто OG партнёрские
- * значения зануляются — «не смешивать результаты компаний».
+ * Владелец (правки-1, В9): вместо внутреннего счёта e.U.→OG — фиктивная наценка
+ * у партнёрских компаний. Легаси-поля внутреннего счёта не трогаем (история).
  */
 function ownerDataFromForm(fd: FormData) {
   const currentOwner = str(fd, "currentOwner") ?? "MOTORHOF_OG";
-  if (!isPartnerOwner(currentOwner)) {
-    return {
-      currentOwner,
-      partnerPurchasePrice: null,
-      partnerAcquisitionCost: null,
-      plannedInternalTransferPrice: null,
-      actualInternalTransferPrice: null,
-      internalInvoiceNumber: null,
-      internalInvoiceDate: null,
-      internalInvoiceTaxScheme: null,
-      internalInvoicePaymentStatus: "OPEN",
-      awaitingInternalInvoice: false,
-    };
-  }
-  const actualInternalTransferPrice = money(fd, "actualInternalTransferPrice");
-  const internalInvoiceNumber = str(fd, "internalInvoiceNumber");
   return {
     currentOwner,
-    partnerPurchasePrice: money(fd, "partnerPurchasePrice"),
-    partnerAcquisitionCost: money(fd, "partnerAcquisitionCost"),
-    plannedInternalTransferPrice: money(fd, "plannedInternalTransferPrice"),
-    actualInternalTransferPrice,
-    internalInvoiceNumber,
-    internalInvoiceDate: date(fd, "internalInvoiceDate"),
-    internalInvoiceTaxScheme: str(fd, "internalInvoiceTaxScheme"),
-    internalInvoicePaymentStatus: str(fd, "internalInvoicePaymentStatus") ?? "OPEN",
-    // Внутренний счёт заполнили (цена + номер) → снимаем пометку «ожидает» (§9).
-    awaitingInternalInvoice:
-      actualInternalTransferPrice != null && !!internalInvoiceNumber ? false : undefined,
+    fictitiousMarkup: isPartnerOwner(currentOwner) ? money(fd, "fictitiousMarkup") : null,
   };
 }
 
+/** Состояние формы авто (П9): ошибка + введённые значения для восстановления. */
+export type CarFormState = { error: string | null; values?: Record<string, string> };
+
+/** Слепок значений формы для возврата при ошибке (multi-значения — через запятую). */
+function formValues(fd: FormData): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of fd.entries()) {
+    if (typeof v === "string") out[k] = k in out ? `${out[k]},${v}` : v;
+  }
+  return out;
+}
+
 /**
- * Валидация формы (§8). Возвращает код ошибки для redirect или null.
- * ferror-коды разбираются на странице формы.
+ * Валидация формы авто (Э3): обязательность всех полей, кроме заметок,
+ * комментариев и даты поступления (В4), плюс прежние проверки-override.
+ * Возвращает человекочитаемый текст ошибки или null.
  */
 function validateCarForm(data: ReturnType<typeof carDataFromForm>, fd: FormData): string | null {
+  const missing: string[] = [];
+  const req = (ok: unknown, label: string) => { if (!ok) missing.push(label); };
+
+  req(data.make !== "—", "Marke");
+  req(data.model !== "—", "Modell");
+  req(data.vin, "VIN");
+  req(data.erstzulassung, "Дата постановки на учёт");
+  req(num(fd, "mileage") != null, "Kilometerstand");
+  req(data.leistung != null, "Leistung");
+  req(data.transmission, "Getriebe");
+  req(data.fuel, "Kraftstoff");
+  req(data.color, "Farbe");
+  req(data.voranmeldungen != null, "Voranmeldungen");
+  req(data.keysCount != null, "Ключей");
+  req(data.purchaseDate, "Дата покупки");
+  req(data.minimumSalePriceGross, "Минимальная цена продажи");
+
+  if (data.taxScheme === "REGELBESTEUERUNG") req(data.plannedSalePriceNet, "Плановая цена НЕТТО");
+  else req(data.plannedSalePriceGross, "Плановая цена продажи");
+
+  if (data.purchaseChannel === "AUKTION") {
+    req(data.auctionInvoiceTotal, "Цена аукциона");
+    req(data.auctionVehiclePrice, "Цена автомобиля");
+    req(data.auctionTransportCost, "Транспортировка");
+    req(data.auctionSupplier, "Поставщик");
+  } else {
+    req(money(fd, "purchasePrice"), "Закупочная цена");
+    if (data.purchaseChannel === "HAENDLER") req(data.haendlerSupplier, "Поставщик");
+  }
+  if (isPartnerOwner(data.currentOwner)) req(data.fictitiousMarkup, "Фиктивная наценка");
+
+  // Сервисная книга есть → детали обязательны (В7).
+  if (["VOLLSTAENDIG", "TEILWEISE", "DIGITAL"].includes(data.serviceheft)) {
+    req(data.lastServiceDate, "Последний сервис");
+    req(data.lastServiceMileage != null, "Пробег на сервисе");
+  }
+  if (missing.length) return `Заполните обязательные поля: ${missing.join(", ")}.`;
+
   // Pickerl = Ja → месяц и год обязательны (§8.4)
   if (data.pickerlVorhanden === "JA" && (data.pickerlMonth == null || data.pickerlYear == null)) {
-    return "pickerl-date";
+    return "Pickerl отмечен как «Да» — укажите Begutachtungsmonat и Begutachtungsjahr.";
   }
   // Дата поступления раньше даты покупки → нужен явный override с причиной (§8.1)
   if (
@@ -266,10 +266,9 @@ function validateCarForm(data: ReturnType<typeof carDataFromForm>, fd: FormData)
     data.arrivalDate < data.purchaseDate &&
     !(str(fd, "dateOverride") === "1" && str(fd, "dateOverrideReason"))
   ) {
-    return "date-order";
+    return "Дата поступления раньше даты покупки. Поставьте галочку override и укажите причину в секции «Основные данные».";
   }
-  // Auktion (§11.2): Auktionsrechnung gesamt не может быть меньше Fahrzeugpreis без
-  // admin override с причиной (форму открывают только edit.car — ADMIN/PARTNER).
+  // Аукцион: цена аукциона не может быть меньше цены автомобиля без override (§11.2).
   if (
     data.purchaseChannel === "AUKTION" &&
     data.auctionInvoiceTotal != null &&
@@ -277,16 +276,16 @@ function validateCarForm(data: ReturnType<typeof carDataFromForm>, fd: FormData)
     new Decimal(data.auctionInvoiceTotal).lt(new Decimal(data.auctionVehiclePrice)) &&
     !(str(fd, "auctionOverride") === "1" && str(fd, "auctionOverrideReason"))
   ) {
-    return "auction-below";
+    return "Цена аукциона меньше цены автомобиля. Поставьте галочку override и укажите причину в ценовом блоке.";
   }
   return null;
 }
 
-export async function createCar(fd: FormData) {
+export async function createCar(_prev: CarFormState, fd: FormData): Promise<CarFormState> {
   const user = await requireCan("edit.car");
   const data = carDataFromForm(fd);
   const err = validateCarForm(data, fd);
-  if (err) redirect(`/cars/new?ferror=${err}`);
+  if (err) return { error: err, values: formValues(fd) };
 
   const car = await prisma.car.create({ data });
   await audit(user.id, "Car", car.id, "create", {
@@ -298,11 +297,11 @@ export async function createCar(fd: FormData) {
   redirect(`/cars/${car.id}${await pickerlAskSuffix(car.id, data)}`);
 }
 
-export async function updateCar(id: string, fd: FormData) {
+export async function updateCar(id: string, _prev: CarFormState, fd: FormData): Promise<CarFormState> {
   const user = await requireCan("edit.car");
   const data = carDataFromForm(fd);
   const err = validateCarForm(data, fd);
-  if (err) redirect(`/cars/${id}/edit?ferror=${err}`);
+  if (err) return { error: err, values: formValues(fd) };
 
   const before = await prisma.car.findUnique({ where: { id } });
 
@@ -312,12 +311,17 @@ export async function updateCar(id: string, fd: FormData) {
     const sold = await prisma.sale.findFirst({ where: { carId: id, stage: "COMPLETED" } });
     const financialChanged =
       before.purchasePrice.toString() !== data.purchasePrice ||
-      before.listPrice.toString() !== data.listPrice ||
-      (before.einkaufspreisGemaess24?.toString() ?? null) !== (data.einkaufspreisGemaess24 ?? null) ||
+      (before.plannedSalePriceGross?.toString() ?? null) !== (data.plannedSalePriceGross ?? null) ||
+      (before.plannedSalePriceNet?.toString() ?? null) !== (data.plannedSalePriceNet ?? null) ||
+      (before.auctionInvoiceTotal?.toString() ?? null) !== (data.auctionInvoiceTotal ?? null) ||
+      (before.fictitiousMarkup?.toString() ?? null) !== (data.fictitiousMarkup ?? null) ||
       (before.minimumSalePriceGross?.toString() ?? null) !== (data.minimumSalePriceGross ?? null) ||
       before.taxScheme !== data.taxScheme;
     if (sold && financialChanged && !(str(fd, "soldOverride") === "1" && str(fd, "soldOverrideReason"))) {
-      redirect(`/cars/${id}/edit?ferror=sold-locked`);
+      return {
+        error: "Авто уже продано — правка финансовых полей задним числом требует admin override (галочка + причина в ценовом блоке).",
+        values: formValues(fd),
+      };
     }
   }
 

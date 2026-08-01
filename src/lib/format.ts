@@ -110,6 +110,13 @@ export type CarForFinance = {
 const pricingChannel = (channel: string | null): PricingChannel =>
   channel === "AUKTION" || channel === "HAENDLER" ? channel : "PRIVAT";
 
+/**
+ * Год авто (В5): выводится из даты постановки на учёт (Erstzulassung);
+ * фолбэк — легаси-поле year у старых записей. null → «—» в UI.
+ */
+export const carYear = (car: { erstzulassung: Date | null; year: number | null }): number | null =>
+  car.erstzulassung ? new Date(car.erstzulassung).getFullYear() : car.year;
+
 /** Полный расчёт ценообразования авто (плановая цена). Единая точка для UI. */
 export const carPricing = (car: CarForFinance): PricingResult => carPricingAt(car, null);
 
@@ -355,7 +362,8 @@ export const TAX_SCHEME: Record<string, string> = {
   REGELBESTEUERUNG: "Regelbesteuerung",
   UNGEKLAERT: "Не определён",
 };
-export const TAX_SCHEME_ORDER = ["DIFFERENZBESTEUERUNG", "REGELBESTEUERUNG", "UNGEKLAERT"];
+// В11 (правки-1): «Не определён» удалён из формы; в словаре — для легаси-показа.
+export const TAX_SCHEME_ORDER = ["DIFFERENZBESTEUERUNG", "REGELBESTEUERUNG"];
 
 export const PURCHASE_CHANNEL: Record<string, string> = {
   PRIVAT: "Privat",
@@ -364,7 +372,13 @@ export const PURCHASE_CHANNEL: Record<string, string> = {
   INZAHLUNGNAHME: "Inzahlungnahme (трейд-ин)",
   IMPORT: "Import",
 };
-export const PURCHASE_CHANNEL_ORDER = ["PRIVAT", "AUKTION", "HAENDLER", "INZAHLUNGNAHME", "IMPORT"];
+// В8 (правки-1): в форме только 3 канала; полный словарь — для показа легаси.
+export const PURCHASE_CHANNEL_ORDER = ["PRIVAT", "AUKTION", "HAENDLER"];
+export const PRICING_CHANNEL_LABEL: Record<string, string> = {
+  PRIVAT: "Приват",
+  AUKTION: "Аукцион",
+  HAENDLER: "Хендлер",
+};
 
 // Import (§11.5)
 export const IMPORT_ZONE: Record<string, string> = { EU: "EU", DRITTLAND: "Drittland" };
@@ -599,11 +613,12 @@ export const auctionTotalBelowVehiclePrice = (car: {
   car.auctionVehiclePrice != null &&
   dec(car.auctionInvoiceTotal).lt(dec(car.auctionVehiclePrice));
 
+// В6 (правки-1): все компании капсом, единообразно во всех местах CRM.
 export const CURRENT_OWNER: Record<string, string> = {
-  MOTORHOF_OG: "MOTORHOF OG",
-  MRIYA_MOTORS: "Mriya Motors",
-  A_MOTORS: "A Motors",
-  AUTOHUB: "AutoHub",
+  MOTORHOF_OG: "MOTORHOF",
+  MRIYA_MOTORS: "MRIYA MOTORS",
+  A_MOTORS: "A-MOTORS",
+  AUTOHUB: "AUTOHUB",
 };
 
 export const ROLE_LABEL: Record<string, string> = {

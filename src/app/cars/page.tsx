@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Cell } from "@/components/cell-link";
 import { requireUser } from "@/lib/auth";
 import { viewerFlags } from "@/lib/authz";
-import { fmtMoney, sumMoney, carCost, carMargin, mhCode, internalCode, carAttention, nowMs, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
+import { fmtMoney, sumMoney, carCost, carMargin, carYear, mhCode, internalCode, carAttention, nowMs, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
 import { Pagination } from "@/components/pagination";
 
 const PAGE_SIZE = 25;
@@ -48,7 +48,7 @@ export default async function CarsPage({
           c.make,
           c.model,
           c.vin ?? "",
-          String(c.year),
+          String(carYear(c) ?? ""), // В5: год из Erstzulassung
           mhCode(c.mhNumber),
           String(c.mhNumber),
           c.parkingRow && c.parkingSpot != null ? `${c.parkingRow}-${c.parkingSpot}` : "",
@@ -197,7 +197,7 @@ export default async function CarsPage({
                           {c.make} {c.model}
                         </div>
                         <div className="text-[12px] text-muted">
-                          {c.year} · {[c.transmission, c.fuel, c.color].filter(Boolean).join(" · ") || "—"}
+                          {carYear(c) ?? "—"} · {[c.transmission, c.fuel, c.color].filter(Boolean).join(" · ") || "—"}
                         </div>
                       </Cell>
                       <Cell href={href} className="mono text-right text-muted">

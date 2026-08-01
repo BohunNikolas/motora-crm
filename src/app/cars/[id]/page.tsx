@@ -17,6 +17,7 @@ import {
   markupPct,
   mhCode,
   internalCode,
+  carYear,
   pickerlNeedsAttention,
   requiredDocs,
   isFinancialDoc,
@@ -143,7 +144,7 @@ export default async function CarPage({
 
   const specs: [string, string][] = [
     ["VIN", car.vin ?? "—"],
-    ["Год", String(car.year)],
+    ["Год", String(carYear(car) ?? "—")], // В5: из Erstzulassung
     ["Пробег", `${car.mileage.toLocaleString("ru-RU")} км`],
     ["КПП", car.transmission ?? "—"],
     ["Топливо", car.fuel ?? "—"],
@@ -245,7 +246,7 @@ export default async function CarPage({
                 {CAR_STATUS[car.status]?.label ?? car.status}
               </span>
               <span className="text-sm text-muted">
-                {car.year} · {car.mileage.toLocaleString("ru-RU")} км · в базе с {fmtDate(car.createdAt)}
+                {carYear(car) ?? "—"} · {car.mileage.toLocaleString("ru-RU")} км · в базе с {fmtDate(car.createdAt)}
               </span>
             </div>
           </div>
