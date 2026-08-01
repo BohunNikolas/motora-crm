@@ -1,12 +1,16 @@
 import { Prisma } from "@prisma/client";
 import {
-  computeVehicleFinance,
+  computePricing,
+  toVehicleFinanceResult,
   splitGrossVat,
   dec,
   round2,
   Decimal,
+  VAT_RATE_DEFAULT,
   type Dec,
   type TaxScheme,
+  type PricingChannel,
+  type PricingResult,
   type VehicleFinanceResult,
 } from "./finance";
 
@@ -89,87 +93,79 @@ export type CarForFinance = {
   taxScheme: string;
   purchasePrice: Prisma.Decimal;
   listPrice: Prisma.Decimal;
-  einkaufspreisGemaess24: Prisma.Decimal | null;
   plannedSalePriceGross: Prisma.Decimal | null;
   expenses: CarExpenseLike[];
-  // §9: для партнёрских авто себестоимость MOTORHOF OG считается от внутреннего
-  // Verkaufspreis e.U.→OG (actual ?? planned), а НЕ от purchasePrice.
   currentOwner: string;
-  actualInternalTransferPrice: Prisma.Decimal | null;
-  plannedInternalTransferPrice: Prisma.Decimal | null;
-  // §11.2 Auktion: базой приобретения служит Auktionsrechnung gesamt,
-  // §24-Einkaufspreis по умолчанию — Fahrzeugpreis (не invoiceTotal!).
+  // Канал закупки: PRIVAT | AUKTION | HAENDLER (легаси-значения считаются как PRIVAT).
   purchaseChannel: string | null;
-  auctionInvoiceTotal: Prisma.Decimal | null;
-  auctionVehiclePrice: Prisma.Decimal | null;
-  // §11.4 Inzahlungnahme: базой приобретения служит зачётная стоимость.
-  tradeInCreditValue: Prisma.Decimal | null;
+  auctionInvoiceTotal: Prisma.Decimal | null;   // цена аукциона (общая стоимость)
+  auctionVehiclePrice: Prisma.Decimal | null;   // цена автомобиля (база дифф. НДС)
+  auctionTransportCost: Prisma.Decimal | null;  // транспортировка
+  // Появятся в схеме в Э2 — до тех пор undefined → трактуются как null.
+  fictitiousMarkup?: Prisma.Decimal | null;     // фиктивная наценка (партнёры)
+  plannedSalePriceNet?: Prisma.Decimal | null;  // Regel: план НЕТТО
+};
+
+/** Канал для расчёта: Трейд-ин/Импорт удалены (В8), легаси-данные считаем как Приват. */
+const pricingChannel = (channel: string | null): PricingChannel =>
+  channel === "AUKTION" || channel === "HAENDLER" ? channel : "PRIVAT";
+
+/** Полный расчёт ценообразования авто (плановая цена). Единая точка для UI. */
+export const carPricing = (car: CarForFinance): PricingResult => carPricingAt(car, null);
+
+/**
+ * Расчёт по конкретной цене продажи (факт при продаже) либо плановой (null).
+ * Regel-переходник: пока план-нетто не введён (Э2), нетто выводится из брутто.
+ */
+export const carPricingAt = (car: CarForFinance, saleGross: Num | null): PricingResult => {
+  const scheme = car.taxScheme as TaxScheme;
+  const plannedGross = saleGross ?? car.plannedSalePriceGross ?? car.listPrice;
+  let plannedNet: Num | null = null;
+  if (scheme === "REGELBESTEUERUNG") {
+    plannedNet =
+      saleGross == null && car.plannedSalePriceNet != null
+        ? car.plannedSalePriceNet
+        : round2(dec(plannedGross).times(100).div(100 + VAT_RATE_DEFAULT));
+  }
+  return computePricing({
+    taxScheme: scheme,
+    channel: pricingChannel(car.purchaseChannel),
+    purchasePrice: car.purchasePrice,
+    auctionTotal: car.auctionInvoiceTotal,
+    auctionVehiclePrice: car.auctionVehiclePrice,
+    transportCost: car.auctionTransportCost,
+    fictitiousMarkup: car.fictitiousMarkup ?? null,
+    plannedSalePriceGross: plannedGross,
+    plannedSalePriceNet: plannedNet,
+    expenses: approvedOnly(car.expenses).map((e) => ({
+      amountGross: e.amountGross,
+      alreadyIncludedInAcquisitionCost: e.alreadyIncludedInAcquisitionCost,
+    })),
+  });
 };
 
 /**
- * Базис приобретения MOTORHOF OG. Приоритет:
- *  1) партнёрское авто (§9) — внутренний Verkaufspreis e.U.→OG (факт ?? план);
- *  2) Auktion (§11.2) — Auktionsrechnung gesamt;
- *  3) Inzahlungnahme (§11.4) — зачётная стоимость;
- *  4) иначе (Privat/Händler/Import) — purchasePrice.
- * Это totalCashAcquisitionCost; §24-Einkaufspreis считается отдельно (см. financeInput).
+ * Финальная закупочная цена авто. Прежнее имя ogAcquisitionBasis сохранено
+ * как алиас до перестройки карточки (Э4).
  */
-export const ogAcquisitionBasis = (car: CarForFinance): Dec => {
-  if (isPartnerOwner(car.currentOwner)) {
-    const internal = car.actualInternalTransferPrice ?? car.plannedInternalTransferPrice;
-    if (internal != null) return dec(internal);
-  }
-  if (car.purchaseChannel === "AUKTION" && car.auctionInvoiceTotal != null) {
-    return dec(car.auctionInvoiceTotal);
-  }
-  if (car.purchaseChannel === "INZAHLUNGNAHME" && car.tradeInCreditValue != null) {
-    return dec(car.tradeInCreditValue);
-  }
-  return dec(car.purchasePrice);
-};
+export const carFinalPurchase = (car: CarForFinance): Dec => carPricing(car).finalPurchasePrice;
+export const ogAcquisitionBasis = carFinalPurchase;
 
-/** §24-Einkaufspreis для расчётов OG (Differenzbesteuerung). */
-const ogEinkauf24 = (car: CarForFinance, basis: Dec): Dec => {
-  // Партнёрское авто: §24-база = внутренний счёт (совпадает с basis).
-  if (isPartnerOwner(car.currentOwner)) return basis;
-  // Auktion: §24 по умолчанию = Fahrzeugpreis, НЕ Auktionsrechnung gesamt (§11.2, §12.2).
-  if (car.purchaseChannel === "AUKTION") {
-    return dec(car.einkaufspreisGemaess24 ?? car.auctionVehiclePrice ?? basis);
-  }
-  return dec(car.einkaufspreisGemaess24 ?? basis);
-};
-
-const financeInput = (car: CarForFinance, salePriceGross: Num) => {
-  const basis = ogAcquisitionBasis(car);
-  return {
-    taxScheme: car.taxScheme as TaxScheme,
-    totalCashAcquisitionCost: basis,
-    einkaufspreisGemaess24: ogEinkauf24(car, basis),
-    salePriceGross,
-    expenses: approvedOnly(car.expenses).map((e) => ({
-      amountGross: e.amountGross,
-      amountNet: e.amountNet,
-      deductibleInputVatAmount: e.deductibleInputVatAmount,
-      alreadyIncludedInAcquisitionCost: e.alreadyIncludedInAcquisitionCost,
-    })),
-  };
-};
-
-/** Себестоимость OG: базис приобретения + подтверждённые расходы OG, не входящие в него. */
+/** Себестоимость: финальная закупочная + подтверждённые расходы, не входящие в неё. */
 export const carCost = (car: CarForFinance): Dec =>
   round2(
     approvedOnly(car.expenses)
       .filter((e) => !e.alreadyIncludedInAcquisitionCost)
-      .reduce((s, e) => s.plus(dec(e.amountGross)), ogAcquisitionBasis(car))
+      .reduce((s, e) => s.plus(dec(e.amountGross)), carFinalPurchase(car))
   );
 
-/** Плановая финансовая картина: цена = plannedSalePriceGross ?? listPrice. */
+/** Плановая финансовая картина (легаси-форма результата для карточки/снапшота). */
 export const carPlannedFinance = (car: CarForFinance): VehicleFinanceResult =>
-  computeVehicleFinance(financeInput(car, car.plannedSalePriceGross ?? car.listPrice));
+  toVehicleFinanceResult(carPricing(car));
 
 /** Фактическая по конкретной цене продажи (проданные авто, дашборд). */
 export const carActualFinance = (car: CarForFinance, salePriceGross: Num): VehicleFinanceResult =>
-  computeVehicleFinance(financeInput(car, salePriceGross));
+  toVehicleFinanceResult(carPricingAt(car, salePriceGross));
 
 /** Плановая финальная маржа (с учётом налога). */
 export const carMargin = (car: CarForFinance): Dec => carPlannedFinance(car).finalMargin;
@@ -209,25 +205,29 @@ export type CarForOwner = {
 };
 
 /**
- * Результат поставляющей компании (e.U./AutoHub) по внутренней продаже в OG (§9).
- * Продажа поставщика = внутренний Verkaufspreis (фактический, иначе плановый);
- * себестоимость поставщика = partnerAcquisitionCost; §24-база = partnerPurchasePrice;
- * налоговый режим — режим ВНУТРЕННЕГО счёта (не путать с режимом продажи OG клиенту).
- * null — если авто не партнёрское или внутренняя цена ещё не задана.
+ * УСТАРЕЛО (В9): механизм внутреннего счёта e.U.→OG заменён фиктивной наценкой.
+ * Функция оставлена до перестройки карточки (Э4), считает по новым формулам.
+ * null — если авто не партнёрское или внутренняя цена не задана.
  */
 export const supplierFinance = (car: CarForOwner): VehicleFinanceResult | null => {
   if (!isPartnerOwner(car.currentOwner)) return null;
   const internalSale = car.actualInternalTransferPrice ?? car.plannedInternalTransferPrice;
   if (internalSale == null) return null;
   const acqCost = car.partnerAcquisitionCost ?? car.partnerPurchasePrice ?? new Decimal(0);
-  const einkauf24 = car.partnerPurchasePrice ?? car.partnerAcquisitionCost ?? new Decimal(0);
-  return computeVehicleFinance({
-    taxScheme: (car.internalInvoiceTaxScheme as TaxScheme) ?? "UNGEKLAERT",
-    totalCashAcquisitionCost: acqCost,
-    einkaufspreisGemaess24: einkauf24,
-    salePriceGross: internalSale,
-    expenses: [],
-  });
+  return toVehicleFinanceResult(
+    computePricing({
+      taxScheme:
+        car.internalInvoiceTaxScheme === "REGELBESTEUERUNG" ? "REGELBESTEUERUNG" : "DIFFERENZBESTEUERUNG",
+      channel: "PRIVAT",
+      purchasePrice: acqCost,
+      plannedSalePriceGross: internalSale,
+      plannedSalePriceNet:
+        car.internalInvoiceTaxScheme === "REGELBESTEUERUNG"
+          ? round2(dec(internalSale).times(100).div(100 + VAT_RATE_DEFAULT))
+          : null,
+      expenses: [],
+    })
+  );
 };
 
 /**

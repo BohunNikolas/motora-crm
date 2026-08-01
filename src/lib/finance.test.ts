@@ -1,192 +1,184 @@
 import { describe, it, expect } from "vitest";
 import {
-  differenzUst,
-  round2,
+  Decimal,
   dec,
-  computeVehicleFinance,
+  round2,
   splitGrossVat,
-  type VehicleFinanceInput,
+  additionalExpensesGross,
+  auctionFee,
+  finalPurchasePrice,
+  differenzUst,
+  regelVat,
+  computePricing,
+  type PricingInput,
 } from "./finance";
 
-// Хелпер: деньги сравниваем как строку с двумя знаками, чтобы не зависеть от
-// внутреннего представления Decimal.
-const eur = (d: { toFixed: (n: number) => string }) => d.toFixed(2);
+const D = (v: number | string) => new Decimal(v);
 
-describe("Differenzbesteuerung (Требования §24.1)", () => {
-  it("Privat 10 000 → продажа 12 000 → USt 333.33, маржа до расходов 1 666.67", () => {
-    const input: VehicleFinanceInput = {
-      taxScheme: "DIFFERENZBESTEUERUNG",
-      totalCashAcquisitionCost: 10000,
-      einkaufspreisGemaess24: 10000,
-      salePriceGross: 12000,
-    };
-    const r = computeVehicleFinance(input);
-    expect(eur(r.vatAmount)).toBe("333.33");
-    expect(eur(r.marginBeforeExpenses)).toBe("1666.67");
-    expect(eur(r.finalMargin)).toBe("1666.67");
-    expect(r.isConfirmed).toBe(true);
+// Базовый вход: Приват, Differenz, MOTORHOF (без наценки).
+const base = (over: Partial<PricingInput> = {}): PricingInput => ({
+  taxScheme: "DIFFERENZBESTEUERUNG",
+  channel: "PRIVAT",
+  purchasePrice: D(10000),
+  plannedSalePriceGross: D(15000),
+  ...over,
+});
+
+describe("Округление и разложение брутто (не менялись)", () => {
+  it("round2 — half-up до цента", () => {
+    expect(round2(dec("10.005")).toString()).toBe("10.01");
+    expect(round2(dec("10.004")).toString()).toBe("10");
   });
 
-  it("Auktion: Fahrzeugpreis 10 000, счёт 10 800, продажа 12 000 → USt 333.33, маржа 866.67", () => {
-    const input: VehicleFinanceInput = {
-      taxScheme: "DIFFERENZBESTEUERUNG",
-      totalCashAcquisitionCost: 10800, // Auktionsrechnung gesamt
-      einkaufspreisGemaess24: 10000, // Fahrzeugpreis
-      salePriceGross: 12000,
-    };
-    const r = computeVehicleFinance(input);
-    expect(eur(r.vatAmount)).toBe("333.33");
-    expect(eur(r.marginBeforeExpenses)).toBe("866.67");
+  it("splitGrossVat: 360 брутто при 20% → нетто 300 + USt 60", () => {
+    const { net, vat } = splitGrossVat(360);
+    expect(net.toString()).toBe("300");
+    expect(vat.toString()).toBe("60");
   });
 
-  it("продажа ниже Einkaufspreis §24 → USt 0, экономический убыток виден", () => {
-    const r = computeVehicleFinance({
-      taxScheme: "DIFFERENZBESTEUERUNG",
-      totalCashAcquisitionCost: 10000,
-      einkaufspreisGemaess24: 10000,
-      salePriceGross: 9000,
-    });
-    expect(eur(r.vatAmount)).toBe("0.00");
-    expect(eur(r.marginBeforeExpenses)).toBe("-1000.00");
-    expect(r.finalMargin.lt(0)).toBe(true);
-  });
-
-  it("НЕ применяет наивную формулу (продажа − закупка) × 0.2", () => {
-    // Наивно было бы (12000−10000)×0.2 = 400. Правильно: 333.33.
-    const r = computeVehicleFinance({
-      taxScheme: "DIFFERENZBESTEUERUNG",
-      totalCashAcquisitionCost: 10000,
-      einkaufspreisGemaess24: 10000,
-      salePriceGross: 12000,
-    });
-    expect(eur(r.vatAmount)).not.toBe("400.00");
-    expect(eur(r.vatAmount)).toBe("333.33");
+  it("additionalExpensesGross: считаются только не включённые в закупочную", () => {
+    const sum = additionalExpensesGross([
+      { amountGross: 250, alreadyIncludedInAcquisitionCost: false },
+      { amountGross: 300, alreadyIncludedInAcquisitionCost: true },
+    ]);
+    expect(sum.toString()).toBe("250");
   });
 });
 
-describe("Округление half-up (§24.1.4)", () => {
-  it("round2 округляет .xx5 вверх", () => {
-    expect(round2(dec("2.675")).toFixed(2)).toBe("2.68");
-    expect(round2(dec("2.665")).toFixed(2)).toBe("2.67");
-    expect(round2(dec("0.005")).toFixed(2)).toBe("0.01");
+describe("Дифф. НДС — 20% СВЕРХУ разницы (В1)", () => {
+  it("(15000 − 12000) × 0.2 = 600 (НЕ 500 по старой 20/120)", () => {
+    expect(differenzUst(15000, 12000).toString()).toBe("600");
   });
 
-  it("differenzUst округляет до цента", () => {
-    // brutto-разница 0.03 → 0.03×20/120 = 0.005 → half-up → 0.01
-    expect(differenzUst(10.03, 10).toFixed(2)).toBe("0.01");
-    // 2000/6 = 333.3333… → 333.33
-    expect(differenzUst(12000, 10000).toFixed(2)).toBe("333.33");
-  });
-});
-
-describe("Двойной вычет комиссии (§24.1.5)", () => {
-  it("расход с флагом alreadyIncludedInAcquisitionCost НЕ вычитается второй раз", () => {
-    // Auktion: комиссия 800 уже в totalCash 10800
-    const r = computeVehicleFinance({
-      taxScheme: "DIFFERENZBESTEUERUNG",
-      totalCashAcquisitionCost: 10800,
-      einkaufspreisGemaess24: 10000,
-      salePriceGross: 12000,
-      expenses: [{ amountGross: 800, alreadyIncludedInAcquisitionCost: true }],
-    });
-    expect(eur(r.additionalExpenses)).toBe("0.00");
-    expect(eur(r.finalMargin)).toBe("866.67");
+  it("отрицательная база → 0 (НДС не бывает отрицательным)", () => {
+    expect(differenzUst(8000, 10000).toString()).toBe("0");
   });
 
-  it("расход БЕЗ флага уменьшает маржу", () => {
-    const r = computeVehicleFinance({
-      taxScheme: "DIFFERENZBESTEUERUNG",
-      totalCashAcquisitionCost: 10800,
-      einkaufspreisGemaess24: 10000,
-      salePriceGross: 12000,
-      expenses: [{ amountGross: 200, alreadyIncludedInAcquisitionCost: false }],
-    });
-    expect(eur(r.additionalExpenses)).toBe("200.00");
-    expect(eur(r.finalMargin)).toBe("666.67"); // 866.67 − 200
+  it("копейки, half-up: база 0.05 → 0.01", () => {
+    expect(differenzUst("10000.05", 10000).toString()).toBe("0.01");
   });
 });
 
-describe("Regelbesteuerung (§12.3, §24.1.6)", () => {
-  it("явно заданная вычитаемая Vorsteuer", () => {
-    const r = computeVehicleFinance({
-      taxScheme: "REGELBESTEUERUNG",
-      totalCashAcquisitionCost: 9600,
-      einkaufspreisGemaess24: 9600,
-      purchaseGross: 9600,
-      confirmedDeductibleInputVat: 1600,
-      salePriceGross: 12000,
-    });
-    expect(eur(r.vatAmount)).toBe("2000.00"); // outputVat 12000×20/120
-    expect(eur(r.saleNet!)).toBe("10000.00");
-    expect(eur(r.marginBeforeExpenses)).toBe("2000.00"); // 10000 − (9600−1600)
-    expect(eur(r.finalMargin)).toBe("2000.00");
+describe("Финальная закупочная цена и аукционный сбор", () => {
+  it("Приват/Хендлер MOTORHOF: финальная = закупочная", () => {
+    expect(finalPurchasePrice({ channel: "PRIVAT", purchasePrice: 10000 }).toString()).toBe("10000");
+    expect(finalPurchasePrice({ channel: "HAENDLER", purchasePrice: 9000 }).toString()).toBe("9000");
   });
 
-  it("расход с вычитаемой Vorsteuer учитывается по netto", () => {
-    const r = computeVehicleFinance({
-      taxScheme: "REGELBESTEUERUNG",
-      totalCashAcquisitionCost: 9600,
-      einkaufspreisGemaess24: 9600,
-      purchaseGross: 9600,
-      confirmedDeductibleInputVat: 1600,
-      salePriceGross: 12000,
-      expenses: [
-        { amountGross: 600, amountNet: 500, deductibleInputVatAmount: 100, alreadyIncludedInAcquisitionCost: false },
-      ],
-    });
-    expect(eur(r.additionalExpenses)).toBe("500.00"); // netto, т.к. есть вычитаемая Vorsteuer
-    expect(eur(r.finalMargin)).toBe("1500.00"); // 2000 − 500
+  it("Приват партнёр: финальная = закупочная + фиктивная наценка", () => {
+    expect(
+      finalPurchasePrice({ channel: "PRIVAT", purchasePrice: 10000, fictitiousMarkup: 1000 }).toString()
+    ).toBe("11000");
+  });
+
+  it("Аукцион: финальная = цена аукциона + транспортировка (+ наценка)", () => {
+    expect(
+      finalPurchasePrice({ channel: "AUKTION", auctionTotal: 12000, transportCost: 300 }).toString()
+    ).toBe("12300");
+    expect(
+      finalPurchasePrice({
+        channel: "AUKTION", auctionTotal: 12000, transportCost: 300, fictitiousMarkup: 700,
+      }).toString()
+    ).toBe("13000");
+  });
+
+  it("аукционный сбор = цена аукциона − цена автомобиля", () => {
+    expect(auctionFee(12000, 11000).toString()).toBe("1000");
   });
 });
 
-describe("UNGEKLAERT (§10.2)", () => {
-  it("считается как Differenz, но помечается неподтверждённым", () => {
-    const r = computeVehicleFinance({
-      taxScheme: "UNGEKLAERT",
-      totalCashAcquisitionCost: 10000,
-      einkaufspreisGemaess24: 10000,
-      salePriceGross: 12000,
-    });
-    expect(eur(r.finalMargin)).toBe("1666.67");
-    expect(r.isConfirmed).toBe(false);
+describe("computePricing — Differenzbesteuerung", () => {
+  it("Приват MOTORHOF: закупка 10000, план 15000 → НДС 1000, маржа 4000", () => {
+    const p = computePricing(base());
+    expect(p.finalPurchasePrice.toString()).toBe("10000");
+    expect(p.vatAmount.toString()).toBe("1000"); // (15000−10000)×0.2
+    expect(p.finalMargin.toString()).toBe("4000"); // 15000−1000−10000
+    expect(p.auctionFee).toBeNull();
+    expect(p.saleNet).toBeNull();
+    expect(p.isConfirmed).toBe(true);
+  });
+
+  it("Приват партнёр: наценка 1000 → финальная 11000, НДС 800, маржа 3200", () => {
+    const p = computePricing(base({ fictitiousMarkup: D(1000) }));
+    expect(p.finalPurchasePrice.toString()).toBe("11000");
+    expect(p.vatAmount.toString()).toBe("800"); // (15000−11000)×0.2
+    expect(p.finalMargin.toString()).toBe("3200"); // 15000−800−11000
+  });
+
+  it("Аукцион MOTORHOF: total 12000 / авто 11000 / транспорт 300 → сбор 1000, финальная 12300, НДС 800, маржа 1900", () => {
+    const p = computePricing(
+      base({ channel: "AUKTION", purchasePrice: null, auctionTotal: D(12000), auctionVehiclePrice: D(11000), transportCost: D(300) })
+    );
+    expect(p.auctionFee?.toString()).toBe("1000");
+    expect(p.finalPurchasePrice.toString()).toBe("12300");
+    // НДС от ЦЕНЫ АВТОМОБИЛЯ, не от финальной закупочной:
+    expect(p.vatAmount.toString()).toBe("800"); // (15000−11000)×0.2
+    expect(p.finalMargin.toString()).toBe("1900"); // 15000−800−12300
+  });
+
+  it("Аукцион партнёр: + наценка 700 → финальная 13000, НДС тот же 800, маржа 1200", () => {
+    const p = computePricing(
+      base({
+        channel: "AUKTION", purchasePrice: null,
+        auctionTotal: D(12000), auctionVehiclePrice: D(11000), transportCost: D(300), fictitiousMarkup: D(700),
+      })
+    );
+    expect(p.finalPurchasePrice.toString()).toBe("13000");
+    expect(p.vatAmount.toString()).toBe("800"); // база — цена автомобиля, наценка не влияет
+    expect(p.finalMargin.toString()).toBe("1200"); // 15000−800−13000
+  });
+
+  it("Хендлер: формулы как у привата", () => {
+    const p = computePricing(base({ channel: "HAENDLER", purchasePrice: D(9000), plannedSalePriceGross: D(12000) }));
+    expect(p.vatAmount.toString()).toBe("600"); // (12000−9000)×0.2
+    expect(p.finalMargin.toString()).toBe("2400"); // 12000−600−9000
+  });
+
+  it("расходы вычитаются из маржи", () => {
+    const p = computePricing(
+      base({ expenses: [
+        { amountGross: 500, alreadyIncludedInAcquisitionCost: false },
+        { amountGross: 999, alreadyIncludedInAcquisitionCost: true }, // не вычитается второй раз
+      ]})
+    );
+    expect(p.additionalExpenses.toString()).toBe("500");
+    expect(p.finalMargin.toString()).toBe("3500"); // 4000−500
+  });
+
+  it("план ниже закупки: НДС 0, маржа отрицательная", () => {
+    const p = computePricing(base({ plannedSalePriceGross: D(8000) }));
+    expect(p.vatAmount.toString()).toBe("0");
+    expect(p.finalMargin.toString()).toBe("-2000"); // 8000−0−10000
   });
 });
 
-describe("План/факт (§24.1.7)", () => {
-  it("плановая и фактическая цена дают разную маржу", () => {
-    const base = {
-      taxScheme: "DIFFERENZBESTEUERUNG" as const,
-      totalCashAcquisitionCost: 10000,
-      einkaufspreisGemaess24: 10000,
-    };
-    const planned = computeVehicleFinance({ ...base, salePriceGross: 13000 });
-    const actual = computeVehicleFinance({ ...base, salePriceGross: 12000 });
-    expect(eur(planned.finalMargin)).toBe("2500.00"); // 13000−10000−500
-    expect(eur(actual.finalMargin)).toBe("1666.67");
-    expect(planned.finalMargin.gt(actual.finalMargin)).toBe(true);
+describe("computePricing — Regelbesteuerung (В10)", () => {
+  it("нетто 12500 → НДС 2500, брутто 15000; маржа = брутто − финальная − расходы", () => {
+    const p = computePricing(
+      base({
+        taxScheme: "REGELBESTEUERUNG",
+        plannedSalePriceGross: null,
+        plannedSalePriceNet: D(12500),
+        expenses: [{ amountGross: 500, alreadyIncludedInAcquisitionCost: false }],
+      })
+    );
+    expect(p.saleNet?.toString()).toBe("12500");
+    expect(p.vatAmount.toString()).toBe("2500"); // 12500×0.2
+    expect(p.saleGross.toString()).toBe("15000"); // 12500+2500
+    expect(p.finalMargin.toString()).toBe("4500"); // 15000−10000−500 (НДС не вычитается, В10)
+  });
+
+  it("regelVat: нетто 100 → НДС 20, брутто 120", () => {
+    const { vat, gross } = regelVat(100);
+    expect(vat.toString()).toBe("20");
+    expect(gross.toString()).toBe("120");
   });
 });
 
-describe("Разложение brutto → net/USt (§14.1)", () => {
-  it("gross 360 @ 20% → USt 60, net 300", () => {
-    const { net, vat } = splitGrossVat(360, 20);
-    expect(eur(vat)).toBe("60.00");
-    expect(eur(net)).toBe("300.00");
-  });
-
-  it("gross 100 @ 20% → USt 16.67 (half-up), net 83.33", () => {
-    const { net, vat } = splitGrossVat(100, 20);
-    expect(eur(vat)).toBe("16.67");
-    expect(eur(net)).toBe("83.33");
-  });
-
-  it("ставка 0% → USt 0, net = gross", () => {
-    const { net, vat } = splitGrossVat(500, 0);
-    expect(eur(vat)).toBe("0.00");
-    expect(eur(net)).toBe("500.00");
-  });
-
-  it("ставка по умолчанию 20%", () => {
-    expect(eur(splitGrossVat(120).vat)).toBe("20.00");
+describe("Легаси UNGEKLAERT (до миграции Э2)", () => {
+  it("считается как Differenz, но isConfirmed=false", () => {
+    const p = computePricing(base({ taxScheme: "UNGEKLAERT" }));
+    expect(p.finalMargin.toString()).toBe("4000");
+    expect(p.isConfirmed).toBe(false);
   });
 });
