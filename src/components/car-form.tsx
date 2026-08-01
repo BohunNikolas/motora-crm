@@ -59,7 +59,8 @@ export function CarForm({
           </div>
           <div>
             <label className="label" htmlFor="year">Год *</label>
-            <input id="year" name="year" type="number" required min={1950} max={new Date().getFullYear() + 1} defaultValue={car?.year} className="field" placeholder="2018" />
+            {/* Э3 удалит поле целиком (В5: главная дата — Erstzulassung). */}
+            <input id="year" name="year" type="number" required min={1950} max={new Date().getFullYear() + 1} defaultValue={car?.year ?? ""} className="field" placeholder="2018" />
           </div>
           <div>
             <label className="label" htmlFor="erstzulassung">Erstzulassung</label>

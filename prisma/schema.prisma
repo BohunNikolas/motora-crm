@@ -12,8 +12,11 @@ model Car {
   vin           String?   @unique  // нормализуется в uppercase (§8.1)
   make          String
   model         String
-  year          Int
-  erstzulassung DateTime? // первая регистрация (§8.1), опционально в дополнение к году
+  // ЛЕГАСИ (правки-1, В5): год не вводится и не хранится для новых авто —
+  // главная дата теперь erstzulassung; год в списках выводится из неё
+  // (фолбэк на легаси year у старых записей).
+  year          Int?
+  erstzulassung DateTime? // дата постановки на учёт — главная (обязательна в UI с Э3)
   mileage       Int
   color         String?
   transmission  String?
@@ -61,11 +64,17 @@ model Car {
   currentOwner  String    @default("MOTORHOF_OG") // MRIYA_MOTORS | A_MOTORS | AUTOHUB | MOTORHOF_OG (§9)
 
   // Финансовые поля (§11, §12, §13). Backfill существующих: einkauf24 = purchasePrice.
-  einkaufspreisGemaess24 Decimal? @db.Decimal(12, 2)
+  einkaufspreisGemaess24 Decimal? @db.Decimal(12, 2) // ЛЕГАСИ (правки-1): не используется
   plannedSalePriceGross  Decimal? @db.Decimal(12, 2)
   minimumSalePriceGross  Decimal? @db.Decimal(12, 2)
+  // Правки-1 (В9/В10): фиктивная наценка партнёрских владельцев входит в
+  // финальную закупочную; план-НЕТТО — ввод для Regelbesteuerung (брутто считается).
+  fictitiousMarkup       Decimal? @db.Decimal(12, 2)
+  plannedSalePriceNet    Decimal? @db.Decimal(12, 2)
   arrivalDate            DateTime?
 
+  // ЛЕГАСИ (правки-1, В9): механизм внутреннего счёта e.U.→OG заменён
+  // фиктивной наценкой (fictitiousMarkup). Поля ниже не используются, не дропаем.
   // Партнёрский владелец и внутренняя продажа e.U. → OG (§9). Значимы только,
   // когда currentOwner ∈ {MRIYA_MOTORS, A_MOTORS, AUTOHUB}; для MOTORHOF_OG — null.
   // Внутренний Verkaufspreis (actual ?? planned) = себестоимость MOTORHOF OG
@@ -103,6 +112,8 @@ model Car {
   haendlerPurchaseVat          Decimal? @db.Decimal(12, 2)
   haendlerPurchaseGross        Decimal? @db.Decimal(12, 2)
   haendlerVorsteuerAusgewiesen Boolean  @default(false) // выделена ли Vorsteuer
+  // ЛЕГАСИ (правки-1, В8): каналы Inzahlungnahme и Import удалены из UI,
+  // поля ниже не используются (легаси-данные считаются как Приват).
   // Inzahlungnahme (§11.4). Клиент и связанная продажа — в фазе 3e (Sale).
   tradeInEstimatedValue Decimal? @db.Decimal(12, 2) // оценочная стоимость принятого авто
   tradeInCreditValue    Decimal? @db.Decimal(12, 2) // зачётная стоимость (база приобретения OG)
