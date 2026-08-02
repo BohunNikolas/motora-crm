@@ -10,7 +10,7 @@ export default function NotFound() {
         <p className="mx-auto mt-2 max-w-[320px] text-[13px] text-muted">
           Записи не существует или у вас нет к ней доступа.
         </p>
-        <Link href="/" className="btn btn-primary mt-5">На дашборд</Link>
+        <Link href="/" className="btn btn-primary mt-5">На главную</Link>
       </div>
     </div>
   );

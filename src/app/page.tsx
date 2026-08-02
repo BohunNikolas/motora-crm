@@ -3,9 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { viewerFlags } from "@/lib/authz";
 import {
-  fmtMoney, fmtDate, fmtTime, sumMoney, carCost, dueLabel, isOverdue,
+  fmtMoney, fmtDate, fmtTime, sumMoney, carCost, carMargin, dueLabel, isOverdue,
   carAttention, nowMs,
-  CAR_STATUS, CAR_STATUS_ORDER, WARRANTY_OPEN_STATUSES, APPOINTMENT_TYPE, TASK_OPEN_STATUSES,
+  CAR_STATUS, CAR_STATUS_ORDER, NOT_FOR_SALE_STATUSES, WARRANTY_OPEN_STATUSES, APPOINTMENT_TYPE, TASK_OPEN_STATUSES,
 } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,11 @@ export default async function Dashboard() {
   const NOW = nowMs();
   const inStock = cars.filter((c) => c.status !== "SOLD" && c.status !== "ARCHIVED");
   const stockValue = sumMoney(inStock.map((c) => carCost(c)));
-  const readyCount = cars.filter((c) => c.status === "READY_FOR_SALE").length;
+  // П2/П3: «В продаже» (READY_FOR_SALE) и «Не в продаже» (активные, ещё не выставленные).
+  const forSale = cars.filter((c) => c.status === "READY_FOR_SALE");
+  const notForSale = cars.filter((c) => NOT_FOR_SALE_STATUSES.includes(c.status));
+  // П4: подпись карточки «В продаже» — общая сумма плановой маржи этих авто.
+  const forSaleMargin = sumMoney(forSale.map((c) => carMargin(c)));
 
   const revenue = sumMoney(salesMonth.map((s) => s.actualSalePriceGross));
   const margin = sumMoney(salesMonth.map((s) => {
@@ -74,8 +78,15 @@ export default async function Dashboard() {
 
   // KPI-карточки (§5.2), по ролям.
   const stats: { label: string; value: string; sub: string; href?: string; accent?: boolean }[] = [
-    { label: "Активный склад", value: String(inStock.length), sub: flags.seeMargin ? fmtMoney(stockValue) : "непроданных", href: "/cars?stock=active" },
-    { label: "Готово к продаже", value: String(readyCount), sub: "READY_FOR_SALE", href: "/cars?status=READY_FOR_SALE" },
+    { label: "Склад", value: String(inStock.length), sub: flags.seeMargin ? fmtMoney(stockValue) : "непроданных", href: "/cars?stock=active" },
+    {
+      label: "В продаже",
+      value: String(forSale.length),
+      // П4: вместо служебного READY_FOR_SALE — сумма плановой маржи (только тем, кто видит маржу).
+      sub: flags.seeMargin ? `плановая маржа ${fmtMoney(forSaleMargin)}` : "готовы к продаже",
+      href: "/cars?status=READY_FOR_SALE",
+    },
+    { label: "Не в продаже", value: String(notForSale.length), sub: "в подготовке и в пути", href: "/cars?stock=notforsale" },
     ...(flags.seeSalePrice ? [{ label: "Продано за месяц", value: String(salesMonth.length), sub: `выручка ${fmtMoney(revenue)}` }] : []),
     ...(flags.seeMargin ? [{ label: "Маржа за месяц", value: fmtMoney(margin), sub: revenue.gt(0) ? `${Math.round(margin.div(revenue).times(100).toNumber())}% от выручки` : "нет продаж", accent: true }] : []),
     ...(flags.canAddExpense ? [{ label: "Расходы за месяц", value: fmtMoney(expenseGross), sub: `оплачено ${fmtMoney(expensePaid)}`, href: "/expenses" }] : []),
@@ -95,7 +106,7 @@ export default async function Dashboard() {
     <div>
       <header className="animate-in mb-7 flex items-end justify-between">
         <div>
-          <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">Дашборд</h1>
+          <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">Обзор</h1>
           <p className="mt-1 text-sm text-muted">{new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Vienna" })}</p>
         </div>
         <div className="flex gap-2">

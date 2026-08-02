@@ -21,7 +21,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         </p>
         <div className="mt-5 flex justify-center gap-2.5">
           <button onClick={reset} className="btn btn-primary">Повторить</button>
-          <Link href="/" className="btn btn-ghost">На дашборд</Link>
+          <Link href="/" className="btn btn-ghost">На главную</Link>
         </div>
       </div>
     </div>

@@ -236,7 +236,7 @@ export const CAR_STATUS: Record<string, { label: string; cls: string }> = {
   IN_PREPARATION: { label: "В подготовке", cls: "chip-amber" },
   IN_SERVICE: { label: "В сервисе", cls: "chip-amber" },
   WAITING_FOR_PHOTOS: { label: "Ожидает фото", cls: "chip-amber" },
-  READY_FOR_SALE: { label: "Готов к продаже", cls: "chip-green" },
+  READY_FOR_SALE: { label: "В продаже", cls: "chip-green" },
   RESERVED: { label: "Бронь", cls: "chip-blue" },
   SOLD: { label: "Продан", cls: "chip-muted" },
   ARCHIVED: { label: "Архив", cls: "chip-muted" },
@@ -248,6 +248,12 @@ export const CAR_STATUS_ORDER = [
 ];
 
 /** Статусы, при которых авто «на складе» (не продано, не архив). */
+/**
+ * «Не в продаже» (правки-1, П3/В2): активные авто, которые ещё не выставлены —
+ * куплен, в дороге, в подготовке, в сервисе, ожидает фото.
+ */
+export const NOT_FOR_SALE_STATUSES = ["PURCHASED", "IN_TRANSIT", "IN_PREPARATION", "IN_SERVICE", "WAITING_FOR_PHOTOS"];
+
 export const ACTIVE_STATUSES = CAR_STATUS_ORDER.filter((s) => s !== "SOLD");
 export const isActiveStatus = (s: string) => s !== "SOLD" && s !== "ARCHIVED";
 

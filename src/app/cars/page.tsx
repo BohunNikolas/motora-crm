@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Cell } from "@/components/cell-link";
 import { requireUser } from "@/lib/auth";
 import { viewerFlags } from "@/lib/authz";
-import { fmtMoney, sumMoney, carCost, carMargin, carYear, carFinalPurchase, mhCode, internalCode, carAttention, nowMs, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
+import { fmtMoney, sumMoney, carCost, carMargin, carYear, carFinalPurchase, mhCode, internalCode, carAttention, nowMs, CAR_STATUS, CAR_STATUS_ORDER, NOT_FOR_SALE_STATUSES } from "@/lib/format";
 import { Pagination } from "@/components/pagination";
 
 const PAGE_SIZE = 25;
@@ -32,6 +32,8 @@ export default async function CarsPage({
   const where: import("@prisma/client").Prisma.CarWhereInput = {};
   if (status && CAR_STATUS[status]) where.status = status;
   if (stock === "active") where.status = { notIn: ["SOLD", "ARCHIVED"] };
+  // П3: «Не в продаже» — активные авто, ещё не выставленные (клик с Обзора).
+  if (stock === "notforsale") where.status = { in: NOT_FOR_SALE_STATUSES };
 
   const all = await prisma.car.findMany({
     where,
@@ -75,8 +77,14 @@ export default async function CarsPage({
   const countOf = (s: string) => counts.find((c) => c.status === s)?._count ?? 0;
   // Всего авто в базе — считаем по groupBy, а не по `all`: `all` уже отфильтрован по статусу.
   const total = counts.reduce((s, c) => s + c._count, 0);
-  const filtered = Boolean(status) || Boolean(needle) || Boolean(attention) || stock === "active";
-  const activeFilterLabel = attention ? ATTENTION_LABEL[attention] : stock === "active" ? "активный склад (без проданных)" : null;
+  const filtered = Boolean(status) || Boolean(needle) || Boolean(attention) || stock === "active" || stock === "notforsale";
+  const activeFilterLabel = attention
+    ? ATTENTION_LABEL[attention]
+    : stock === "active"
+      ? "склад (без проданных)"
+      : stock === "notforsale"
+        ? "не в продаже (в подготовке и в пути)"
+        : null;
 
   const totalCost = sumMoney(cars.map((c) => carCost(c)));
   const totalMargin = sumMoney(cars.map((c) => carMargin(c)));
