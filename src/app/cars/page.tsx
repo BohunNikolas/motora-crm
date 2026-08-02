@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Cell } from "@/components/cell-link";
 import { requireUser } from "@/lib/auth";
 import { viewerFlags } from "@/lib/authz";
-import { fmtMoney, sumMoney, carCost, carMargin, carYear, mhCode, internalCode, carAttention, nowMs, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
+import { fmtMoney, sumMoney, carCost, carMargin, carYear, carFinalPurchase, mhCode, internalCode, carAttention, nowMs, CAR_STATUS, CAR_STATUS_ORDER } from "@/lib/format";
 import { Pagination } from "@/components/pagination";
 
 const PAGE_SIZE = 25;
@@ -205,7 +205,7 @@ export default async function CarsPage({
                       </Cell>
                       {flags.seeAcquisition && (
                         <Cell href={href} className="mono text-right">
-                          {fmtMoney(c.purchasePrice)}
+                          {fmtMoney(carFinalPurchase(c))}{/* правки-1: финальная закупочная */}
                         </Cell>
                       )}
                       {flags.seeAcquisition && (

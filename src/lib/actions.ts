@@ -17,7 +17,6 @@ import {
   fmtTime,
   pickerlNeedsAttention,
   isPartnerOwner,
-  internalInvoiceComplete,
   buildSaleSnapshot,
 } from "./format";
 
@@ -618,14 +617,11 @@ export async function completeSale(carId: string, fd: FormData) {
     ? await prisma.sale.update({ where: { id: active.id }, data: saleData })
     : await prisma.sale.create({ data: { carId, ...saleData } });
 
-  // §9: партнёрское авто без завершённого внутр. счёта → «ожидает внутренний счёт».
-  const awaitingInvoice = isPartnerOwner(car.currentOwner) && !internalInvoiceComplete(car);
   const freeParking = car.parkingRow || car.parkingSpot != null;
   await prisma.car.update({
     where: { id: carId },
     data: {
       status: "SOLD",
-      awaitingInternalInvoice: awaitingInvoice,
       ...(freeParking ? { parkingRow: null, parkingSpot: null } : {}),
     },
   });
@@ -641,7 +637,7 @@ export async function completeSale(carId: string, fd: FormData) {
   });
 
   await audit(user.id, "Sale", sale.id, overrideReason ? "sell-below-min-override" : "sell", {
-    after: { carId, clientId, salePrice, finalMargin: snapshot.finalMargin, awaitingInternalInvoice: awaitingInvoice || undefined },
+    after: { carId, clientId, salePrice, finalMargin: snapshot.finalMargin },
     reason: overrideReason,
   });
   revalidateAll();

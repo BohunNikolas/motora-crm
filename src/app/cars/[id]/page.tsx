@@ -12,8 +12,7 @@ import {
   fmtDate,
   sumMoney,
   carCost,
-  carPlannedFinance,
-  ogAcquisitionBasis,
+  carPricing,
   markupPct,
   mhCode,
   internalCode,
@@ -22,8 +21,6 @@ import {
   requiredDocs,
   isFinancialDoc,
   isPartnerOwner,
-  supplierFinance,
-  auctionFeeGross,
   auctionTotalBelowVehiclePrice,
   DOC_TYPES,
   DOC_TYPE_LABEL,
@@ -40,9 +37,6 @@ import {
   TAX_SCHEME,
   CURRENT_OWNER,
   PURCHASE_CHANNEL,
-  IMPORT_ZONE,
-  SURCHARGE_BY,
-  INTERNAL_INVOICE_PAYMENT,
   SERVICEHEFT,
   JA_NEIN_UNBEKANNT,
   BODY_PART_LABEL,
@@ -136,10 +130,9 @@ export default async function CarPage({
   };
 
   const expensesTotal = sumMoney(car.expenses.map((e) => e.amountGross));
-  const ogBasis = ogAcquisitionBasis(car); // §9: для партнёрских авто = внутр. счёт
+  const pricing = carPricing(car); // правки-1: финальная закупочная, НДС, сбор, нетто/брутто
   const cost = carCost(car);
-  const fin = carPlannedFinance(car);
-  const margin = fin.finalMargin;
+  const margin = pricing.finalMargin;
   const markup = markupPct(car);
 
   const specs: [string, string][] = [
@@ -158,9 +151,8 @@ export default async function CarPage({
   const nachParts = car.nachlackierungenParts.map((p) => BODY_PART_LABEL[p] ?? p).join(", ");
   const pickerlAlert = pickerlNeedsAttention(car);
 
-  // Владелец и внутренняя продажа e.U. → OG (§9).
+  // Партнёрский владелец (правки-1): фиктивная наценка вместо внутреннего счёта.
   const isPartner = isPartnerOwner(car.currentOwner);
-  const supplierFin = seeInternal && isPartner ? supplierFinance(car) : null;
 
   // Бронь/продажа (§18) — производные для форм и сводки.
   const seeMinPrice = can(user, "see.minPrice");
@@ -218,8 +210,7 @@ export default async function CarPage({
     </form>
   );
 
-  // Канал закупки (§11) — детали видны под see.acquisition.
-  const feeGross = auctionFeeGross(car);
+  // Канал закупки — детали видны под see.acquisition.
   const auctionBelow = auctionTotalBelowVehiclePrice(car);
   const acqRow = (label: string, value: string | null) =>
     value ? (
@@ -288,15 +279,6 @@ export default async function CarPage({
                 : serror === "below-min"
                   ? "Цена ниже Mindestverkaufspreis — нужен override роли PARTNER/ADMIN."
                   : "Не удалось выполнить действие."}
-        </div>
-      )}
-
-      {/* §9: партнёрское авто продано без внутреннего счёта e.U.→OG — незавершённость видна всем. */}
-      {car.awaitingInternalInvoice && (
-        <div className="animate-in mb-4 rounded-xl border border-[rgba(242,163,60,0.4)] bg-[var(--accent-dim)] px-4 py-3 text-[14px]">
-          <b>Ожидает внутренний счёт e.U. → OG.</b> Авто продано, но фактический внутренний
-          Verkaufspreis и данные счёта ещё не подтверждены (§9). Внесите их в форме
-          редактирования, чтобы завершить внутреннюю продажу.
         </div>
       )}
 
@@ -383,133 +365,35 @@ export default async function CarPage({
             )}
           </section>
 
-          {/* Владелец и внутренняя продажа e.U. → OG (§9) — только see.internalPrice. */}
-          {seeInternal && isPartner && (
+          {/* Закупка по каналу (правки-1) — детали под see.acquisition. */}
+          {seeAcq && car.purchaseChannel === "AUKTION" && (
             <section className="panel animate-in delay-1 p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-bold">Внутренняя продажа e.U. → OG</h2>
-                <div className="flex items-center gap-2">
-                  <span className="chip chip-muted">{CURRENT_OWNER[car.currentOwner] ?? car.currentOwner}</span>
-                  <span className={`chip ${car.internalInvoicePaymentStatus === "PAID" ? "chip-green" : "chip-amber"}`}>
-                    {INTERNAL_INVOICE_PAYMENT[car.internalInvoicePaymentStatus] ?? car.internalInvoicePaymentStatus}
-                  </span>
-                </div>
-              </div>
-
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[14px]">
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted">Закупка поставщика</dt>
-                  <dd className="mono">{car.partnerPurchasePrice ? fmtMoney(car.partnerPurchasePrice) : "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted">Общая стоимость приобр.</dt>
-                  <dd className="mono">{car.partnerAcquisitionCost ? fmtMoney(car.partnerAcquisitionCost) : "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted">Внутр. Verkaufspreis (план)</dt>
-                  <dd className="mono">{car.plannedInternalTransferPrice ? fmtMoney(car.plannedInternalTransferPrice) : "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted">Внутр. Verkaufspreis (факт)</dt>
-                  <dd className="mono font-bold">{car.actualInternalTransferPrice ? fmtMoney(car.actualInternalTransferPrice) : "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted">№ внутр. счёта</dt>
-                  <dd className="mono">{car.internalInvoiceNumber ?? "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted">Дата счёта</dt>
-                  <dd>{car.internalInvoiceDate ? fmtDate(car.internalInvoiceDate) : "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-muted">Режим внутр. счёта</dt>
-                  <dd>{car.internalInvoiceTaxScheme ? TAX_SCHEME[car.internalInvoiceTaxScheme] ?? car.internalInvoiceTaxScheme : "—"}</dd>
-                </div>
-              </dl>
-
-              {/* Два независимых результата — не смешивать (§9). */}
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-line bg-surface-2 p-4">
-                  <div className="label mb-1">Результат поставляющей компании</div>
-                  {supplierFin ? (
-                    <>
-                      <div className={`mono text-[20px] font-bold leading-none ${supplierFin.finalMargin.gte(0) ? "text-green" : "text-red"}`}>
-                        {fmtMoney(supplierFin.finalMargin)}
-                      </div>
-                      <div className="mt-1.5 text-[12px] text-muted">
-                        {supplierFin.taxScheme === "REGELBESTEUERUNG" ? "Ausgangs-USt" : "Differenz-USt"} {fmtMoney(supplierFin.vatAmount)}
-                        {!supplierFin.isConfirmed && " · режим не определён"}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-[13px] text-muted">Нет внутренней цены — результат не рассчитан.</div>
-                  )}
-                </div>
-                <div className="rounded-xl border border-line bg-surface-2 p-4">
-                  <div className="label mb-1">Результат MOTORHOF OG</div>
-                  <div className={`mono text-[20px] font-bold leading-none ${margin.gte(0) ? "text-green" : "text-red"}`}>
-                    {fmtMoney(margin)}
-                  </div>
-                  <div className="mt-1.5 text-[12px] text-muted">
-                    себестоимость от внутр. счёта · наценка {markup}%
-                  </div>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* Закупка по каналу (§11) — детали под see.acquisition (закупочные цены/счета). */}
-          {seeAcq && car.purchaseChannel && car.purchaseChannel !== "PRIVAT" && (
-            <section className="panel animate-in delay-1 p-5">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-bold">Закупка · {PURCHASE_CHANNEL[car.purchaseChannel] ?? car.purchaseChannel}</h2>
-                {car.purchaseChannel === "AUKTION" && auctionBelow && (
-                  <span className="chip chip-amber">gesamt &lt; Fahrzeugpreis (override)</span>
+                <h2 className="text-[15px] font-bold">Закупка · Аукцион</h2>
+                {auctionBelow && (
+                  <span className="chip chip-amber">цена аукциона &lt; цены автомобиля (override)</span>
                 )}
               </div>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[14px]">
-                {car.purchaseChannel === "AUKTION" && (<>
-                  {acqRow("Fahrzeugpreis", car.auctionVehiclePrice ? fmtMoney(car.auctionVehiclePrice) : null)}
-                  {acqRow("Auktionsgebühr netto", car.auctionFeeNet ? fmtMoney(car.auctionFeeNet) : null)}
-                  {acqRow("USt на комиссию", car.auctionFeeVat ? fmtMoney(car.auctionFeeVat) : null)}
-                  {acqRow("Auktionsgebühr brutto", feeGross ? fmtMoney(feeGross) : null)}
-                  {acqRow("Transportkosten", car.auctionTransportCost ? fmtMoney(car.auctionTransportCost) : null)}
-                  {acqRow("Sonstige Gebühren", car.auctionOtherFees ? fmtMoney(car.auctionOtherFees) : null)}
-                  <div className="col-span-2 flex justify-between gap-3 border-t border-line pt-2.5 font-bold">
-                    <dt>Auktionsrechnung gesamt</dt>
-                    <dd className="mono">{car.auctionInvoiceTotal ? fmtMoney(car.auctionInvoiceTotal) : "—"}</dd>
-                  </div>
-                  {acqRow("№ счёта", car.auctionInvoiceNumber)}
-                  {acqRow("Поставщик", car.auctionSupplier)}
-                  {acqRow("Страна", car.auctionCountry)}
-                </>)}
-                {car.purchaseChannel === "HAENDLER" && (<>
-                  {acqRow("Поставщик", car.haendlerSupplier)}
-                  {acqRow("№ счёта", car.haendlerInvoiceNumber)}
-                  {acqRow("Дата счёта", car.haendlerInvoiceDate ? fmtDate(car.haendlerInvoiceDate) : null)}
-                  {acqRow("Purchase netto", car.haendlerPurchaseNet ? fmtMoney(car.haendlerPurchaseNet) : null)}
-                  {acqRow("Purchase USt", car.haendlerPurchaseVat ? fmtMoney(car.haendlerPurchaseVat) : null)}
-                  {acqRow("Purchase brutto", car.haendlerPurchaseGross ? fmtMoney(car.haendlerPurchaseGross) : null)}
-                  {acqRow("Vorsteuer выделена", car.haendlerVorsteuerAusgewiesen ? "Ja" : "Nein")}
-                </>)}
-                {car.purchaseChannel === "INZAHLUNGNAHME" && (<>
-                  {acqRow("Оценочная стоимость", car.tradeInEstimatedValue ? fmtMoney(car.tradeInEstimatedValue) : null)}
-                  {acqRow("Зачётная стоимость", car.tradeInCreditValue ? fmtMoney(car.tradeInCreditValue) : null)}
-                  {acqRow("Доплата", car.tradeInSurcharge ? fmtMoney(car.tradeInSurcharge) : null)}
-                  {acqRow("Кто доплачивает", car.tradeInSurchargeBy ? SURCHARGE_BY[car.tradeInSurchargeBy] ?? car.tradeInSurchargeBy : null)}
-                </>)}
-                {car.purchaseChannel === "IMPORT" && (<>
-                  {acqRow("Страна", car.importCountry)}
-                  {acqRow("Зона", car.importZone ? IMPORT_ZONE[car.importZone] ?? car.importZone : null)}
-                  {acqRow("Валюта счёта", car.importCurrency)}
-                  {acqRow("Курс к EUR", car.importExchangeRate ? car.importExchangeRate.toString() : null)}
-                  {acqRow("Сумма счёта", car.importInvoiceAmount ? car.importInvoiceAmount.toString() : null)}
-                  {acqRow("Транспорт", car.importTransportCost ? fmtMoney(car.importTransportCost) : null)}
-                  {acqRow("Zoll", car.importZoll ? fmtMoney(car.importZoll) : null)}
-                  {acqRow("Einfuhrumsatzsteuer", car.importEust ? fmtMoney(car.importEust) : null)}
-                  {acqRow("NoVA", car.importNova ? fmtMoney(car.importNova) : null)}
-                  {acqRow("Прочие расходы", car.importOtherCosts ? fmtMoney(car.importOtherCosts) : null)}
-                </>)}
+                {acqRow("Цена аукциона (общая)", car.auctionInvoiceTotal ? fmtMoney(car.auctionInvoiceTotal) : null)}
+                {acqRow("Цена автомобиля (база НДС)", car.auctionVehiclePrice ? fmtMoney(car.auctionVehiclePrice) : null)}
+                {acqRow("Аукционный сбор (расчёт)", pricing.auctionFee ? fmtMoney(pricing.auctionFee) : null)}
+                {acqRow("Транспортировка", car.auctionTransportCost ? fmtMoney(car.auctionTransportCost) : null)}
+                {acqRow("Поставщик", car.auctionSupplier)}
+                <div className="col-span-2 flex justify-between gap-3 border-t border-line pt-2.5 font-bold">
+                  <dt>Финальная закупочная</dt>
+                  <dd className="mono">{fmtMoney(pricing.finalPurchasePrice)}</dd>
+                </div>
+              </dl>
+            </section>
+          )}
+          {seeAcq && car.purchaseChannel === "HAENDLER" && (
+            <section className="panel animate-in delay-1 p-5">
+              <h2 className="mb-4 text-[15px] font-bold">Закупка · Хендлер</h2>
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[14px]">
+                {acqRow("Поставщик", car.haendlerSupplier)}
+                {acqRow("Закупочная цена", fmtMoney(car.purchasePrice))}
+                {acqRow("Финальная закупочная", fmtMoney(pricing.finalPurchasePrice))}
               </dl>
             </section>
           )}
@@ -761,22 +645,22 @@ export default async function CarPage({
 
           {seeMoney && (
           <section className="panel animate-in delay-2 p-5">
-            <h2 className="mb-4 text-[15px] font-bold">Экономика{isPartner ? " · MOTORHOF OG" : ""}</h2>
+            <h2 className="mb-4 text-[15px] font-bold">Экономика</h2>
             <div className="mb-3 flex items-center justify-between text-[13px]">
               <span className="text-muted">Налоговый режим</span>
-              <span className={fin.isConfirmed ? "" : "text-red"}>{TAX_SCHEME[car.taxScheme] ?? car.taxScheme}</span>
+              <span>{TAX_SCHEME[car.taxScheme] ?? car.taxScheme}</span>
             </div>
-            {!fin.isConfirmed && (
-              <div className="mb-3 rounded-lg border border-[rgba(248,113,113,0.3)] bg-[var(--red-dim)] px-3 py-2 text-[12px] text-red">
-                Налоговый режим не определён — расчёт USt и маржа предварительные и не входят
-                в подтверждённые итоги.
-              </div>
-            )}
             <div className="flex flex-col gap-2.5 text-[14px]">
               <div className="flex justify-between">
-                <span className="text-muted">{isPartner ? "Внутр. счёт (база OG)" : "Закупка"}</span>
-                <span className="mono">{fmtMoney(ogBasis)}</span>
+                <span className="text-muted">Финальная закупочная</span>
+                <span className="mono">{fmtMoney(pricing.finalPurchasePrice)}</span>
               </div>
+              {seeInternal && isPartner && car.fictitiousMarkup && (
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-muted">в т.ч. фиктивная наценка</span>
+                  <span className="mono">{fmtMoney(car.fictitiousMarkup)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted">Расходы</span>
                 <span className="mono">{expensesTotal.gt(0) ? `+ ${fmtMoney(expensesTotal)}` : "—"}</span>
@@ -785,16 +669,33 @@ export default async function CarPage({
                 <span>Себестоимость</span>
                 <span className="mono">{fmtMoney(cost)}</span>
               </div>
-              <div className="mt-1 flex justify-between">
-                <span className="text-muted">Цена продажи (план)</span>
-                <span className="mono">{fmtMoney(car.plannedSalePriceGross ?? car.listPrice)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">
-                  {car.taxScheme === "REGELBESTEUERUNG" ? "Ausgangs-USt" : "Differenz-USt"}
-                </span>
-                <span className="mono">− {fmtMoney(fin.vatAmount)}</span>
-              </div>
+              {car.taxScheme === "REGELBESTEUERUNG" ? (
+                <>
+                  <div className="mt-1 flex justify-between">
+                    <span className="text-muted">Цена продажи НЕТТО (план)</span>
+                    <span className="mono">{pricing.saleNet ? fmtMoney(pricing.saleNet) : "—"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">НДС 20%</span>
+                    <span className="mono">+ {fmtMoney(pricing.vatAmount)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Цена продажи БРУТТО</span>
+                    <span className="mono">{fmtMoney(pricing.saleGross)}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mt-1 flex justify-between">
+                    <span className="text-muted">Цена продажи (план)</span>
+                    <span className="mono">{fmtMoney(pricing.saleGross)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">Дифф. НДС (20% от разницы)</span>
+                    <span className="mono">− {fmtMoney(pricing.vatAmount)}</span>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="mt-4 rounded-xl border border-line bg-surface-2 p-4">
@@ -818,7 +719,6 @@ export default async function CarPage({
                 <div>
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     <span className={`chip ${SALE_STAGE.COMPLETED.cls}`}>{SALE_STAGE.COMPLETED.label}</span>
-                    {car.awaitingInternalInvoice && <span className="chip chip-amber">ожидает внутр. счёт</span>}
                   </div>
                   <dl className="flex flex-col gap-2 text-[14px]">
                     <div className="flex justify-between gap-3"><dt className="text-muted">Покупатель</dt><dd>{completedSale.client?.name ?? "—"}</dd></div>

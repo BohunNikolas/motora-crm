@@ -13,7 +13,6 @@ import {
   carPricing,
   carMargin,
   carCost,
-  auctionFeeGross,
   auctionTotalBelowVehiclePrice,
   buildSaleSnapshot,
   reservationExpired,
@@ -203,11 +202,6 @@ describe("Каналы закупки (новая модель: Приват/А�
     expect(p.vatAmount.toString()).toBe("400"); // (12000−10000)×0.2 — от цены автомобиля
     expect(p.finalMargin.toString()).toBe("800"); // 12000−400−10800
     expect(carCost(c).toString()).toBe("10800"); // себестоимость = финальная закупочная
-  });
-
-  it("Auktionsgebühr brutto (легаси-поля) = netto + USt; null если оба пусты", () => {
-    expect(auctionFeeGross({ auctionFeeNet: D(100), auctionFeeVat: D(20) })?.toString()).toBe("120");
-    expect(auctionFeeGross({ auctionFeeNet: null, auctionFeeVat: null })).toBeNull();
   });
 
   it("проверка §11.2: gesamt < цены автомобиля → нарушение (нужен override)", () => {

@@ -151,12 +151,8 @@ export const carPricingAt = (car: CarForFinance, saleGross: Num | null): Pricing
   });
 };
 
-/**
- * Финальная закупочная цена авто. Прежнее имя ogAcquisitionBasis сохранено
- * как алиас до перестройки карточки (Э4).
- */
+/** Финальная закупочная цена авто (правки-1). */
 export const carFinalPurchase = (car: CarForFinance): Dec => carPricing(car).finalPurchasePrice;
-export const ogAcquisitionBasis = carFinalPurchase;
 
 /** Себестоимость: финальная закупочная + подтверждённые расходы, не входящие в неё. */
 export const carCost = (car: CarForFinance): Dec =>
@@ -197,55 +193,6 @@ export const PARTNER_OWNERS = ["MRIYA_MOTORS", "A_MOTORS", "AUTOHUB"] as const;
 export const isPartnerOwner = (owner: string): boolean =>
   (PARTNER_OWNERS as readonly string[]).includes(owner);
 
-export const INTERNAL_INVOICE_PAYMENT: Record<string, string> = {
-  OPEN: "Не оплачен",
-  PAID: "Оплачен",
-};
-
-export type CarForOwner = {
-  currentOwner: string;
-  partnerPurchasePrice: Prisma.Decimal | null;
-  partnerAcquisitionCost: Prisma.Decimal | null;
-  plannedInternalTransferPrice: Prisma.Decimal | null;
-  actualInternalTransferPrice: Prisma.Decimal | null;
-  internalInvoiceTaxScheme: string | null;
-};
-
-/**
- * УСТАРЕЛО (В9): механизм внутреннего счёта e.U.→OG заменён фиктивной наценкой.
- * Функция оставлена до перестройки карточки (Э4), считает по новым формулам.
- * null — если авто не партнёрское или внутренняя цена не задана.
- */
-export const supplierFinance = (car: CarForOwner): VehicleFinanceResult | null => {
-  if (!isPartnerOwner(car.currentOwner)) return null;
-  const internalSale = car.actualInternalTransferPrice ?? car.plannedInternalTransferPrice;
-  if (internalSale == null) return null;
-  const acqCost = car.partnerAcquisitionCost ?? car.partnerPurchasePrice ?? new Decimal(0);
-  return toVehicleFinanceResult(
-    computePricing({
-      taxScheme:
-        car.internalInvoiceTaxScheme === "REGELBESTEUERUNG" ? "REGELBESTEUERUNG" : "DIFFERENZBESTEUERUNG",
-      channel: "PRIVAT",
-      purchasePrice: acqCost,
-      plannedSalePriceGross: internalSale,
-      plannedSalePriceNet:
-        car.internalInvoiceTaxScheme === "REGELBESTEUERUNG"
-          ? round2(dec(internalSale).times(100).div(100 + VAT_RATE_DEFAULT))
-          : null,
-      expenses: [],
-    })
-  );
-};
-
-/**
- * Внутренний счёт e.U.→OG «завершён» — есть фактический внутренний Verkaufspreis
- * и номер счёта (§9). От этого зависит блокировка/пометка при переводе в SOLD.
- */
-export const internalInvoiceComplete = (car: {
-  actualInternalTransferPrice: Prisma.Decimal | null;
-  internalInvoiceNumber: string | null;
-}): boolean => car.actualInternalTransferPrice != null && !!car.internalInvoiceNumber;
-
 // ─── Financial snapshot продажи (§18.2) ─────────────────────────
 // Замораживает финрасчёт на момент продажи: смена настроек ставки/цен позже
 // НЕ меняет историческую маржу. Деньги — строки (JSON-стабильно, без float).
@@ -267,7 +214,7 @@ export function buildSaleSnapshot(car: CarForFinance, salePriceGross: Num): Sale
   return {
     taxScheme: fin.taxScheme,
     vatLabel: car.taxScheme === "REGELBESTEUERUNG" ? "Ausgangs-USt" : "Differenz-USt",
-    acquisitionBasis: ogAcquisitionBasis(car).toString(),
+    acquisitionBasis: carFinalPurchase(car).toString(),
     salePriceGross: dec(salePriceGross).toString(),
     vatAmount: fin.vatAmount.toString(),
     cost: carCost(car).toString(),
@@ -591,15 +538,6 @@ export const reservationExpired = (
   now: Date = new Date()
 ): boolean =>
   sale.stage === "RESERVED" && sale.reservationExpiresAt != null && new Date(sale.reservationExpiresAt) < now;
-
-/** Auktionsgebühr brutto = netto + USt (§11.2), справочно для отображения. */
-export const auctionFeeGross = (car: {
-  auctionFeeNet: Prisma.Decimal | null;
-  auctionFeeVat: Prisma.Decimal | null;
-}): Dec | null =>
-  car.auctionFeeNet == null && car.auctionFeeVat == null
-    ? null
-    : sumMoney([car.auctionFeeNet, car.auctionFeeVat]);
 
 /**
  * Проверка §11.2: Auktionsrechnung gesamt не может быть меньше Fahrzeugpreis
