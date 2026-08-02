@@ -40,6 +40,13 @@ const dueDay = (offset) => {
   return d;
 };
 
+/** Дата в ТЕКУЩЕМ месяце: N-й день месяца, но не позже сегодняшнего (KPI «за месяц»). */
+const thisMonth = (dayOfMonth) => {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), Math.min(dayOfMonth, now.getDate()), 12, 0, 0, 0);
+  return d;
+};
+
 /** Дата в прошлом месяце (20-е число) — для проверки границы месяца */
 const lastMonth = () => {
   const d = new Date();
@@ -67,72 +74,109 @@ async function main() {
       },
     });
 
-  // Австрийский топ б/у: Golf, Octavia, Tiguan, A4, 3er, Polo, Astra, Clio, Fabia, Focus.
+  // Австрийский топ б/у. Правки-1: год не задаём (выводится из erstzulassung),
+  // цены по новой модели канал×владелец, у партнёрских компаний — фиктивная наценка.
+  const ez = (y, m, d) => new Date(Date.UTC(y, m - 1, d));
+
   const [golf, fabia, astra, polo, a4, octavia, clio, tiguan, bmw, focus] =
     await Promise.all([
+      // Приват / MOTORHOF: финальная = закупочная 16500; НДС = (19900−16500)×0.2 = 680
       car(
-        { make: "Volkswagen", model: "Golf", year: 2019, mileage: 78000, vin: "WVWZZZ1KZAW123456",
-          color: "Серый", transmission: "МКПП", fuel: "Дизель", engineVol: 2.0,
-          purchasePrice: 16500, listPrice: 19900, status: "READY_FOR_SALE",
+        { make: "Volkswagen", model: "Golf", erstzulassung: ez(2019, 3, 14), mileage: 78000, vin: "WVWZZZ1KZAW123456",
+          color: "Серый", transmission: "МКПП", fuel: "Дизель", leistung: 110, voranmeldungen: 1, keysCount: 2,
+          purchaseChannel: "PRIVAT", currentOwner: "MOTORHOF_OG", taxScheme: "DIFFERENZBESTEUERUNG",
+          purchaseDate: day(-40), purchasePrice: 16500, listPrice: 19900,
+          plannedSalePriceGross: 19900, minimumSalePriceGross: 18500, status: "READY_FOR_SALE",
+          serviceheft: "VOLLSTAENDIG", lastServiceDate: day(-120), lastServiceMileage: 72000,
           notes: "Один владелец, сервисная книжка полная." },
         [{ title: "Замена колодок", amount: 250 }, { title: "Химчистка салона", amount: 180 }]
       ),
+      // Приват / MRIYA MOTORS: наценка 800 → финальная 10300; НДС = (12200−10300)×0.2 = 380
       car(
-        { make: "Skoda", model: "Fabia", year: 2018, mileage: 64000, color: "Белый",
-          transmission: "МКПП", fuel: "Бензин", engineVol: 1.0,
-          purchasePrice: 9500, listPrice: 12200, status: "READY_FOR_SALE" },
+        { make: "Skoda", model: "Fabia", erstzulassung: ez(2018, 7, 2), mileage: 64000, color: "Белый",
+          transmission: "МКПП", fuel: "Бензин", leistung: 70, voranmeldungen: 2, keysCount: 2,
+          purchaseChannel: "PRIVAT", currentOwner: "MRIYA_MOTORS", taxScheme: "DIFFERENZBESTEUERUNG",
+          purchaseDate: day(-30), purchasePrice: 9500, fictitiousMarkup: 800, listPrice: 12200,
+          plannedSalePriceGross: 12200, minimumSalePriceGross: 11500, status: "READY_FOR_SALE" },
         [{ title: "Полировка кузова", amount: 150 }]
       ),
+      // Хендлер / MOTORHOF
       car(
-        { make: "Opel", model: "Astra", year: 2018, mileage: 89000, color: "Серебристый",
-          transmission: "АКПП", fuel: "Дизель", engineVol: 1.6,
-          purchasePrice: 11000, listPrice: 13900, status: "IN_PREPARATION",
+        { make: "Opel", model: "Astra", erstzulassung: ez(2018, 11, 20), mileage: 89000, color: "Серебристый",
+          transmission: "АКПП", fuel: "Дизель", leistung: 100, voranmeldungen: 2, keysCount: 1,
+          purchaseChannel: "HAENDLER", haendlerSupplier: "Autohaus Steiner", currentOwner: "MOTORHOF_OG",
+          taxScheme: "DIFFERENZBESTEUERUNG", purchaseDate: day(-25), purchasePrice: 11000, listPrice: 13900,
+          plannedSalePriceGross: 13900, minimumSalePriceGross: 13000, status: "IN_PREPARATION",
           notes: "Ждём стойки, потом на мойку." },
         [{ title: "Замена стоек", amount: 320 }, { title: "Развал-схождение", amount: 90 }]
       ),
+      // Regelbesteuerung: нетто 11500 → НДС 2300 → брутто 13800
       car(
-        { make: "Volkswagen", model: "Polo", year: 2019, mileage: 52000, color: "Синий",
-          transmission: "АКПП", fuel: "Бензин", engineVol: 1.0,
-          purchasePrice: 11000, listPrice: 13800, status: "READY_FOR_SALE" }
+        { make: "Volkswagen", model: "Polo", erstzulassung: ez(2019, 5, 8), mileage: 52000, color: "Синий",
+          transmission: "АКПП", fuel: "Бензин", leistung: 70, voranmeldungen: 1, keysCount: 2,
+          purchaseChannel: "PRIVAT", currentOwner: "MOTORHOF_OG", taxScheme: "REGELBESTEUERUNG",
+          purchaseDate: day(-20), purchasePrice: 11000,
+          plannedSalePriceNet: 11500, plannedSalePriceGross: 13800, listPrice: 13800,
+          minimumSalePriceGross: 13000, status: "READY_FOR_SALE" }
       ),
+      // Аукцион / AUTOHUB: наценка 900; финальная = 17800+400+900 = 19100; НДС = (22500−17200)×0.2 = 1060
       car(
-        { make: "Audi", model: "A4 Avant", year: 2017, mileage: 112000, color: "Чёрный",
-          transmission: "АКПП", fuel: "Дизель", engineVol: 2.0,
-          purchasePrice: 18000, listPrice: 22500, status: "RESERVED",
+        { make: "Audi", model: "A4 Avant", erstzulassung: ez(2017, 9, 1), mileage: 112000, color: "Чёрный",
+          transmission: "АКПП", fuel: "Дизель", leistung: 140, voranmeldungen: 2, keysCount: 2,
+          purchaseChannel: "AUKTION", auctionInvoiceTotal: 17800, auctionVehiclePrice: 17200,
+          auctionTransportCost: 400, auctionSupplier: "Autobid", currentOwner: "AUTOHUB",
+          fictitiousMarkup: 900, taxScheme: "DIFFERENZBESTEUERUNG",
+          purchaseDate: day(-35), purchasePrice: 0, listPrice: 22500,
+          plannedSalePriceGross: 22500, minimumSalePriceGross: 21000, status: "RESERVED",
           notes: "Бронь до пятницы, залог внесён." },
         [{ title: "Ремонт кондиционера", amount: 400 }]
       ),
+      // Аукцион / MOTORHOF: финальная = 16500+300 = 16800; НДС = (20900−16000)×0.2 = 980
       car(
-        { make: "Skoda", model: "Octavia", year: 2020, mileage: 41000, color: "Серый",
-          transmission: "Робот", fuel: "Дизель", engineVol: 2.0,
-          purchasePrice: 17000, listPrice: 20900, status: "READY_FOR_SALE" },
+        { make: "Skoda", model: "Octavia", erstzulassung: ez(2020, 2, 17), mileage: 41000, color: "Серый",
+          transmission: "Робот", fuel: "Дизель", leistung: 110, voranmeldungen: 1, keysCount: 2,
+          purchaseChannel: "AUKTION", auctionInvoiceTotal: 16500, auctionVehiclePrice: 16000,
+          auctionTransportCost: 300, auctionSupplier: "Autobid", currentOwner: "MOTORHOF_OG",
+          taxScheme: "DIFFERENZBESTEUERUNG", purchaseDate: day(-15), purchasePrice: 0, listPrice: 20900,
+          plannedSalePriceGross: 20900, minimumSalePriceGross: 19500, status: "READY_FOR_SALE",
+          serviceheft: "DIGITAL", lastServiceDate: day(-60), lastServiceMileage: 38000 },
         [{ title: "Замена масла и фильтров", amount: 260 }]
       ),
+      // Хендлер / A-MOTORS: наценка 600 → финальная 9100
       car(
-        { make: "Renault", model: "Clio", year: 2018, mileage: 71000, color: "Красный",
-          transmission: "МКПП", fuel: "Бензин", engineVol: 0.9,
-          purchasePrice: 8500, listPrice: 10900, status: "IN_PREPARATION" },
+        { make: "Renault", model: "Clio", erstzulassung: ez(2018, 4, 25), mileage: 71000, color: "Красный",
+          transmission: "МКПП", fuel: "Бензин", leistung: 66, voranmeldungen: 3, keysCount: 1,
+          purchaseChannel: "HAENDLER", haendlerSupplier: "Renault Wien", currentOwner: "A_MOTORS",
+          fictitiousMarkup: 600, taxScheme: "DIFFERENZBESTEUERUNG",
+          purchaseDate: day(-18), purchasePrice: 8500, listPrice: 10900,
+          plannedSalePriceGross: 10900, minimumSalePriceGross: 10200, status: "IN_PREPARATION" },
         [{ title: "Химчистка", amount: 180 }]
       ),
       // Продан в этом месяце
       car(
-        { make: "Volkswagen", model: "Tiguan", year: 2017, mileage: 98000, color: "Белый",
-          transmission: "АКПП", fuel: "Дизель", engineVol: 2.0,
-          purchasePrice: 15500, listPrice: 18900, status: "SOLD" },
+        { make: "Volkswagen", model: "Tiguan", erstzulassung: ez(2017, 6, 12), mileage: 98000, color: "Белый",
+          transmission: "АКПП", fuel: "Дизель", leistung: 110, voranmeldungen: 2, keysCount: 2,
+          purchaseChannel: "PRIVAT", currentOwner: "MOTORHOF_OG", taxScheme: "DIFFERENZBESTEUERUNG",
+          purchaseDate: day(-70), purchasePrice: 15500, listPrice: 18900,
+          plannedSalePriceGross: 18900, minimumSalePriceGross: 17800, status: "SOLD" },
         [{ title: "Замена ремня ГРМ", amount: 300 }]
       ),
       // Продан в этом месяце
       car(
-        { make: "BMW", model: "320d", year: 2018, mileage: 84000, color: "Чёрный",
-          transmission: "АКПП", fuel: "Дизель", engineVol: 2.0,
-          purchasePrice: 19000, listPrice: 23500, status: "SOLD" },
+        { make: "BMW", model: "320d", erstzulassung: ez(2018, 1, 30), mileage: 84000, color: "Чёрный",
+          transmission: "АКПП", fuel: "Дизель", leistung: 140, voranmeldungen: 1, keysCount: 2,
+          purchaseChannel: "PRIVAT", currentOwner: "MOTORHOF_OG", taxScheme: "DIFFERENZBESTEUERUNG",
+          purchaseDate: day(-65), purchasePrice: 19000, listPrice: 23500,
+          plannedSalePriceGross: 23500, minimumSalePriceGross: 22000, status: "SOLD" },
         [{ title: "Новая резина", amount: 500 }]
       ),
       // Продан в ПРОШЛОМ месяце — не должен попасть в выручку текущего
       car(
-        { make: "Ford", model: "Focus", year: 2016, mileage: 121000, color: "Тёмно-синий",
-          transmission: "МКПП", fuel: "Дизель", engineVol: 1.5,
-          purchasePrice: 7500, listPrice: 9900, status: "SOLD" },
+        { make: "Ford", model: "Focus", erstzulassung: ez(2016, 8, 5), mileage: 121000, color: "Тёмно-синий",
+          transmission: "МКПП", fuel: "Дизель", leistung: 88, voranmeldungen: 3, keysCount: 1,
+          purchaseChannel: "PRIVAT", currentOwner: "MOTORHOF_OG", taxScheme: "DIFFERENZBESTEUERUNG",
+          purchaseDate: day(-100), purchasePrice: 7500, listPrice: 9900,
+          plannedSalePriceGross: 9900, minimumSalePriceGross: 9200, status: "SOLD" },
         [{ title: "Сварка порогов", amount: 220 }]
       ),
     ]);
@@ -163,9 +207,9 @@ async function main() {
   const emp = await p.user.findFirst({ where: { active: true } });
   const snap = (gross, margin, scheme = "DIFFERENZBESTEUERUNG") => ({ salePriceGross: gross, finalMargin: margin, taxScheme: scheme });
   await Promise.all([
-    p.sale.create({ data: { carId: tiguan.id, clientId: sabine.id, stage: "COMPLETED", saleDate: day(-5), actualSalePriceGross: 18900, paymentStatus: "PAID", paymentMethod: "TRANSFER", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(18900, 2683.33) } }),
-    p.sale.create({ data: { carId: bmw.id, clientId: christina.id, stage: "COMPLETED", saleDate: day(-3), actualSalePriceGross: 23500, paymentStatus: "PAID", paymentMethod: "FINANCING", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(23500, 3416.67) } }),
-    p.sale.create({ data: { carId: focus.id, clientId: michael.id, stage: "COMPLETED", saleDate: lastMonth(), actualSalePriceGross: 9900, paymentStatus: "PAID", paymentMethod: "CASH", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(9900, 2016.67) } }),
+    p.sale.create({ data: { carId: tiguan.id, clientId: sabine.id, stage: "COMPLETED", saleDate: thisMonth(1), actualSalePriceGross: 18900, paymentStatus: "PAID", paymentMethod: "TRANSFER", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(18900, 2420) } }),
+    p.sale.create({ data: { carId: bmw.id, clientId: christina.id, stage: "COMPLETED", saleDate: thisMonth(2), actualSalePriceGross: 23500, paymentStatus: "PAID", paymentMethod: "FINANCING", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(23500, 3100) } }),
+    p.sale.create({ data: { carId: focus.id, clientId: michael.id, stage: "COMPLETED", saleDate: lastMonth(), actualSalePriceGross: 9900, paymentStatus: "PAID", paymentMethod: "CASH", saleCategory: "B2C", employeeUserId: emp?.id, financialSnapshot: snap(9900, 1700) } }),
     p.sale.create({ data: { carId: a4.id, clientId: stefan.id, stage: "RESERVED", reservedAt: day(-2), reservationExpiresAt: day(3), anzahlung: 700, reservationPaymentMethod: "CASH", reservationComment: "Залог внесён, ждёт одобрения кредита" } }),
   ]);
 
