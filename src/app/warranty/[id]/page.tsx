@@ -70,7 +70,7 @@ export default async function WarrantyDetailPage({ params }: { params: Promise<{
           <h2 className="mb-4 text-[15px] font-bold">Жалоба и обработка</h2>
           <div className="flex flex-col gap-4">
             {field("Описание жалобы", wc.complaintDescription)}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {field("Дата обращения", wc.clientReportedAt ? fmtDate(wc.clientReportedAt) : "—")}
               {field("Срок", wc.deadline ? <span className={isWarrantyOpen(wc.status) && new Date(wc.deadline) < new Date() ? "text-red" : ""}>{fmtDate(wc.deadline)}</span> : "—")}
               {field("Ответственный", wc.responsible?.name)}

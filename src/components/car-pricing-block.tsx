@@ -83,7 +83,7 @@ export function CarPricingBlock({ defaults }: { defaults: PricingDefaults }) {
         обновляются на лету; сервер пересчитывает их заново при сохранении.
       </p>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div>
           <label className="label" htmlFor="currentOwner">Владелец *</label>
           <select id="currentOwner" name="currentOwner" required value={owner} onChange={(e) => setOwner(e.target.value)} className="field">

@@ -94,7 +94,7 @@ export default async function ClientsPage({
         </div>
         <form className="flex gap-2">
           {type && <input type="hidden" name="type" value={type} />}
-          <input name="q" defaultValue={q ?? ""} className="field w-[240px]" placeholder="Имя, телефон, email…" />
+          <input name="q" defaultValue={q ?? ""} className="field w-full sm:w-[240px]" placeholder="Имя, телефон, email…" />
           <button type="submit" className="btn btn-ghost">Найти</button>
           {q && (
             <Link href={linkFor(type)} className="btn btn-ghost" title="Сбросить поиск">✕</Link>

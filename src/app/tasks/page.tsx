@@ -39,7 +39,7 @@ function TaskRow({ task, canManage }: { task: TaskFull; canManage: boolean }) {
   const st = TASK_STATUS[task.status];
 
   return (
-    <div className="flex items-center gap-3 border-b border-line py-2.5 last:border-none">
+    <div className="flex items-start gap-3 border-b border-line py-2.5 last:border-none sm:items-center">
       {/* Быстрое переключение выполнено/в работу (детальные статусы — в форме правки). */}
       {canManage && (
         <form action={setTaskStatus.bind(null, task.id, task.status === "DONE" ? "OPEN" : "DONE")} className="flex">
@@ -58,7 +58,7 @@ function TaskRow({ task, canManage }: { task: TaskFull; canManage: boolean }) {
       )}
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Link
             href={`/tasks/${task.id}/edit`}
             className={`text-[14px] hover:text-accent ${task.status === "DONE" || task.status === "CANCELLED" ? "text-muted line-through" : "font-medium"}`}
@@ -154,7 +154,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
   return (
     <div>
-      <header className="animate-in mb-6 flex items-end justify-between">
+      <header className="animate-in mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">Задачи</h1>
           <p className="mt-1 text-sm text-muted">
@@ -187,28 +187,28 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       {/* Фильтры (в URL, §23) */}
       <form className="panel animate-in mb-5 flex flex-wrap items-end gap-3 p-4" method="get">
         {sp.scope && <input type="hidden" name="scope" value={sp.scope} />}
-        <div><label className="label">Статус</label>
-          <select name="status" defaultValue={sp.status ?? ""} className="field w-[150px]">
+        <div className="w-full sm:w-auto"><label className="label">Статус</label>
+          <select name="status" defaultValue={sp.status ?? ""} className="field w-full sm:w-[150px]">
             <option value="">активные</option>
             {TASK_STATUS_ORDER.map((k) => (<option key={k} value={k}>{TASK_STATUS[k].label}</option>))}
           </select></div>
-        <div><label className="label">Приоритет</label>
-          <select name="priority" defaultValue={sp.priority ?? ""} className="field w-[130px]">
+        <div className="w-full sm:w-auto"><label className="label">Приоритет</label>
+          <select name="priority" defaultValue={sp.priority ?? ""} className="field w-full sm:w-[130px]">
             <option value="">все</option>
             {TASK_PRIORITY_ORDER.map((k) => (<option key={k} value={k}>{TASK_PRIORITY[k].label}</option>))}
           </select></div>
-        <div><label className="label">Тип</label>
-          <select name="type" defaultValue={sp.type ?? ""} className="field w-[150px]">
+        <div className="w-full sm:w-auto"><label className="label">Тип</label>
+          <select name="type" defaultValue={sp.type ?? ""} className="field w-full sm:w-[150px]">
             <option value="">все</option>
             {TASK_TYPE_ORDER.map((k) => (<option key={k} value={k}>{TASK_TYPE[k]}</option>))}
           </select></div>
-        <div><label className="label">Ответственный</label>
-          <select name="assignedToUserId" defaultValue={sp.assignedToUserId ?? ""} className="field w-[150px]">
+        <div className="w-full sm:w-auto"><label className="label">Ответственный</label>
+          <select name="assignedToUserId" defaultValue={sp.assignedToUserId ?? ""} className="field w-full sm:w-[150px]">
             <option value="">все</option>
             {users.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
           </select></div>
-        <div><label className="label">Авто</label>
-          <select name="carId" defaultValue={sp.carId ?? ""} className="field w-[190px]">
+        <div className="w-full sm:w-auto"><label className="label">Авто</label>
+          <select name="carId" defaultValue={sp.carId ?? ""} className="field w-full sm:w-[190px]">
             <option value="">все</option>
             {cars.map((c) => (<option key={c.id} value={c.id}>{carLabel(c, c.make, c.model)}</option>))}
           </select></div>

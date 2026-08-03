@@ -226,13 +226,13 @@ export default async function CarPage({
         <Link href="/cars" className="text-[13px] font-semibold text-muted hover:text-ink">
           ← Автомобили
         </Link>
-        <div className="mt-2 flex items-start justify-between gap-4">
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="mono mb-1 text-[13px] font-bold text-muted">{internalCode(car)}</div>
             <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">
               {car.make} {car.model}
             </h1>
-            <div className="mt-2 flex items-center gap-3">
+            <div className="mt-2 flex flex-wrap items-center gap-3">
               <span className={`chip ${CAR_STATUS[car.status]?.cls ?? "chip-muted"}`}>
                 {CAR_STATUS[car.status]?.label ?? car.status}
               </span>
@@ -285,7 +285,7 @@ export default async function CarPage({
       {/* Модалка предложения создать Pickerl-задачу (§8.4) — только сразу после
           сохранения (по query-параметру), не при каждом рендере. */}
       {pickerl === "ask" && can(user, "task.manage") && (
-        <div className="animate-in mb-4 flex items-center justify-between gap-4 rounded-xl border border-[rgba(242,163,60,0.3)] bg-[var(--accent-dim)] p-4">
+        <div className="animate-in mb-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[rgba(242,163,60,0.3)] bg-[var(--accent-dim)] p-4">
           <p className="text-[14px]">
             Для <b>{internalCode(car)} {car.make} {car.model}</b> требуется Pickerl (§57a). Создать задачу по прохождению?
           </p>
@@ -298,11 +298,11 @@ export default async function CarPage({
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2 flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="flex flex-col gap-4 lg:col-span-2">
           <section className="panel animate-in delay-1 p-5">
             <h2 className="mb-4 text-[15px] font-bold">Характеристики</h2>
-            <dl className="grid grid-cols-4 gap-y-4">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3 xl:grid-cols-4">
               {specs.map(([k, v]) => (
                 <div key={k}>
                   <dt className="label mb-1">{k}</dt>
@@ -330,13 +330,13 @@ export default async function CarPage({
               <form action={createTask} className="mb-4 flex flex-wrap gap-2">
                 <input type="hidden" name="type" value="FAHRZEUG" />
                 <input type="hidden" name="carId" value={car.id} />
-                <input name="title" required placeholder="Новая задача по авто" className="field min-w-[220px] flex-1" />
-                <select name="assignedToUserId" defaultValue="" className="field w-[150px]">
+                <input name="title" required placeholder="Новая задача по авто" className="field w-full flex-1 sm:min-w-[220px]" />
+                <select name="assignedToUserId" defaultValue="" className="field w-full sm:w-[150px]">
                   <option value="">— ответственный —</option>
                   {taskUsers.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
                 </select>
-                <input name="dueDate" type="date" className="field w-[150px]" />
-                <select name="priority" defaultValue="MEDIUM" className="field w-[130px]">
+                <input name="dueDate" type="date" className="field w-full sm:w-[150px]" />
+                <select name="priority" defaultValue="MEDIUM" className="field w-full sm:w-[130px]">
                   {TASK_PRIORITY_ORDER.map((k) => (<option key={k} value={k}>{TASK_PRIORITY[k].label}</option>))}
                 </select>
                 <SubmitButton className="btn btn-primary" pendingText="Сохранение…">Создать</SubmitButton>
@@ -349,7 +349,7 @@ export default async function CarPage({
                 {car.tasks.map((t) => {
                   const isOpen = TASK_OPEN_STATUSES.includes(t.status);
                   return (
-                    <div key={t.id} className="flex items-center gap-2.5 border-b border-line py-2 last:border-none">
+                    <div key={t.id} className="flex flex-wrap items-center gap-2.5 border-b border-line py-2 last:border-none">
                       <span className={`h-2 w-2 shrink-0 rounded-full ${!isOpen ? "bg-[var(--muted)]" : isOverdue(t.dueDate) ? "bg-red" : "bg-accent"}`} />
                       <Link href={`/tasks/${t.id}/edit`} className={`min-w-0 flex-1 text-[13.5px] hover:text-accent ${t.status === "DONE" ? "text-muted line-through" : ""}`}>
                         {t.title}
@@ -374,13 +374,13 @@ export default async function CarPage({
                   <span className="chip chip-amber">цена аукциона &lt; цены автомобиля (override)</span>
                 )}
               </div>
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[14px]">
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-[14px] sm:grid-cols-2">
                 {acqRow("Цена аукциона (общая)", car.auctionInvoiceTotal ? fmtMoney(car.auctionInvoiceTotal) : null)}
                 {acqRow("Цена автомобиля (база НДС)", car.auctionVehiclePrice ? fmtMoney(car.auctionVehiclePrice) : null)}
                 {acqRow("Аукционный сбор (расчёт)", pricing.auctionFee ? fmtMoney(pricing.auctionFee) : null)}
                 {acqRow("Транспортировка", car.auctionTransportCost ? fmtMoney(car.auctionTransportCost) : null)}
                 {acqRow("Поставщик", car.auctionSupplier)}
-                <div className="col-span-2 flex justify-between gap-3 border-t border-line pt-2.5 font-bold">
+                <div className="flex justify-between gap-3 border-t border-line pt-2.5 font-bold sm:col-span-2">
                   <dt>Финальная закупочная</dt>
                   <dd className="mono">{fmtMoney(pricing.finalPurchasePrice)}</dd>
                 </div>
@@ -390,7 +390,7 @@ export default async function CarPage({
           {seeAcq && car.purchaseChannel === "HAENDLER" && (
             <section className="panel animate-in delay-1 p-5">
               <h2 className="mb-4 text-[15px] font-bold">Закупка · Хендлер</h2>
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[14px]">
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-[14px] sm:grid-cols-2">
                 {acqRow("Поставщик", car.haendlerSupplier)}
                 {acqRow("Закупочная цена", fmtMoney(car.purchasePrice))}
                 {acqRow("Финальная закупочная", fmtMoney(pricing.finalPurchasePrice))}
@@ -401,7 +401,7 @@ export default async function CarPage({
           {/* Техническая карта (§8.2–8.4) — видна всем вошедшим (техчасть). */}
           <section className="panel animate-in delay-2 p-5">
             <h2 className="mb-4 text-[15px] font-bold">Техническая карта</h2>
-            <dl className="grid grid-cols-3 gap-y-4">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
               <div>
                 <dt className="label mb-1">Serviceheft</dt>
                 <dd className="text-[14px]">{SERVICEHEFT[car.serviceheft] ?? car.serviceheft}</dd>
@@ -449,7 +449,7 @@ export default async function CarPage({
               )}
             </div>
             {photos.length > 0 && (
-              <div className="mb-4 grid grid-cols-4 gap-2">
+              <div className="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {photos.map((p) => (
                   <div key={p.id} className="group relative aspect-square overflow-hidden rounded-lg border border-line bg-surface-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -515,7 +515,7 @@ export default async function CarPage({
 
             {canUploadDoc && storageOk && (
               <form action={uploadCarFile.bind(null, car.id, "DOCUMENT")} className="flex flex-wrap items-center gap-2">
-                <select name="docType" className="field w-[220px] !py-1.5 text-[13px]" defaultValue="KAUFVERTRAG">
+                <select name="docType" className="field w-full !py-1.5 text-[13px] sm:w-[220px]" defaultValue="KAUFVERTRAG">
                   {DOC_TYPES.filter((t) => seeFinDocs || !t.financial).map((t) => (
                     <option key={t.key} value={t.key}>{t.label}</option>
                   ))}

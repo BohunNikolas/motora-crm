@@ -104,7 +104,7 @@ export default async function CarsPage({
 
   return (
     <div>
-      <header className="animate-in mb-6 flex items-end justify-between">
+      <header className="animate-in mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">Автомобили</h1>
           <p className="mt-1 text-sm text-muted">
@@ -119,7 +119,7 @@ export default async function CarsPage({
         )}
       </header>
 
-      <div className="animate-in delay-1 mb-4 flex items-center justify-between gap-4">
+      <div className="animate-in delay-1 mb-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap gap-2">
           <Link href={linkFor()} className={`chip ${!status ? "chip-amber" : "chip-muted"}`}>
             Все · {total}
@@ -134,12 +134,12 @@ export default async function CarsPage({
             </Link>
           ))}
         </div>
-        <form className="flex gap-2">
+        <form className="flex w-full gap-2 sm:w-auto">
           {status && <input type="hidden" name="status" value={status} />}
           <input
             name="q"
             defaultValue={q ?? ""}
-            className="field w-[240px]"
+            className="field w-full sm:w-[240px]"
             placeholder="Марка, модель, VIN, год…"
           />
           <button type="submit" className="btn btn-ghost">Найти</button>

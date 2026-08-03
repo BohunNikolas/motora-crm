@@ -91,7 +91,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
 
   return (
     <div>
-      <header className="animate-in mb-6 flex items-end justify-between">
+      <header className="animate-in mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">Расходы</h1>
           <p className="mt-1 text-sm text-muted">{expenses.length} записей{sp.month ? ` · ${sp.month}` : ""}</p>
@@ -103,7 +103,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
       </header>
 
       {/* Итоги */}
-      <div className="animate-in mb-5 grid grid-cols-5 gap-3">
+      <div className="animate-in mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         {totals.map((t) => (
           <div key={t.label} className="panel p-4">
             <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted">{t.label}</div>
@@ -114,34 +114,34 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
 
       {/* Фильтры (в URL, §23) */}
       <form className="panel animate-in mb-5 flex flex-wrap items-end gap-3 p-4" method="get">
-        <div><label className="label">Месяц</label><input type="month" name="month" defaultValue={sp.month} className="field w-[150px]" /></div>
-        <div><label className="label">Категория</label>
-          <select name="category" defaultValue={sp.category ?? ""} className="field w-[180px]">
+        <div className="w-full sm:w-auto"><label className="label">Месяц</label><input type="month" name="month" defaultValue={sp.month} className="field w-full sm:w-[150px]" /></div>
+        <div className="w-full sm:w-auto"><label className="label">Категория</label>
+          <select name="category" defaultValue={sp.category ?? ""} className="field w-full sm:w-[180px]">
             <option value="">все</option>
             {EXPENSE_CATEGORY_ORDER.map((k) => (<option key={k} value={k}>{EXPENSE_CATEGORY[k]}</option>))}
           </select></div>
-        <div><label className="label">Авто</label>
-          <select name="carId" defaultValue={sp.carId ?? ""} className="field w-[190px]">
+        <div className="w-full sm:w-auto"><label className="label">Авто</label>
+          <select name="carId" defaultValue={sp.carId ?? ""} className="field w-full sm:w-[190px]">
             <option value="">все</option>
             {cars.map((c) => (<option key={c.id} value={c.id}>{carLabel(c, c.make, c.model)}</option>))}
           </select></div>
-        <div><label className="label">Владелец</label>
-          <select name="ownerCompany" defaultValue={sp.ownerCompany ?? ""} className="field w-[140px]">
+        <div className="w-full sm:w-auto"><label className="label">Владелец</label>
+          <select name="ownerCompany" defaultValue={sp.ownerCompany ?? ""} className="field w-full sm:w-[140px]">
             <option value="">все</option>
             {Object.entries(CURRENT_OWNER).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
           </select></div>
-        <div><label className="label">Ответственный</label>
-          <select name="responsibleUserId" defaultValue={sp.responsibleUserId ?? ""} className="field w-[150px]">
+        <div className="w-full sm:w-auto"><label className="label">Ответственный</label>
+          <select name="responsibleUserId" defaultValue={sp.responsibleUserId ?? ""} className="field w-full sm:w-[150px]">
             <option value="">все</option>
             {users.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
           </select></div>
-        <div><label className="label">Оплата</label>
-          <select name="paymentStatus" defaultValue={sp.paymentStatus ?? ""} className="field w-[130px]">
+        <div className="w-full sm:w-auto"><label className="label">Оплата</label>
+          <select name="paymentStatus" defaultValue={sp.paymentStatus ?? ""} className="field w-full sm:w-[130px]">
             <option value="">все</option>
             {Object.entries(EXPENSE_PAYMENT_STATUS).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}
           </select></div>
-        <div><label className="label">Поставщик</label><input name="supplier" defaultValue={sp.supplier} className="field w-[140px]" placeholder="поиск" /></div>
-        <div><label className="label">Сумма €</label>
+        <div className="w-full sm:w-auto"><label className="label">Поставщик</label><input name="supplier" defaultValue={sp.supplier} className="field w-full sm:w-[140px]" placeholder="поиск" /></div>
+        <div className="w-full sm:w-auto"><label className="label">Сумма €</label>
           <div className="flex gap-1">
             <input name="minAmount" type="number" defaultValue={sp.minAmount} className="field mono w-[80px]" placeholder="от" />
             <input name="maxAmount" type="number" defaultValue={sp.maxAmount} className="field mono w-[80px]" placeholder="до" />
@@ -154,7 +154,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
 
       {/* Таблица */}
       <div className="panel animate-in overflow-x-auto p-0">
-        <table className="table w-full">
+        <table className="table w-full min-w-[900px]">
           <thead>
             <tr>
               <th className="text-left">Дата</th>

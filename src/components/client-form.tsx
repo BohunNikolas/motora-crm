@@ -4,7 +4,7 @@ import { CLIENT_TYPE, CLIENT_SOURCE } from "@/lib/format";
 /** Поля клиента. Используется и в инлайн-форме на /clients, и на странице редактирования. */
 export function ClientFields({ client }: { client?: Client }) {
   return (
-    <div className="grid grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <div>
         <label className="label" htmlFor="name">Имя *</label>
         <input id="name" name="name" required defaultValue={client?.name} className="field" placeholder="Thomas Gruber" />
@@ -46,7 +46,7 @@ export function ClientFields({ client }: { client?: Client }) {
           )}
         </select>
       </div>
-      <div className="col-span-3">
+      <div className="sm:col-span-2 xl:col-span-3">
         <label className="label" htmlFor="notes">Заметки</label>
         <input
           id="notes"

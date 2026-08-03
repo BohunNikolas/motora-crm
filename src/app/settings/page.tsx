@@ -26,20 +26,22 @@ export default async function SettingsPage() {
           <h2 className="text-[15px] font-bold">Пользователи и роли</h2>
           <span className="text-[13px] text-muted">{users.filter((u) => u.active).length} активных</span>
         </div>
-        <table className="table w-full">
-          <thead><tr><th className="text-left">Имя</th><th className="text-left">Email</th><th className="text-left">Роли</th><th className="text-left">Статус</th><th className="text-left">Создан</th></tr></thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td className="font-medium">{u.name}</td>
-                <td className="mono text-[13px] text-muted">{u.email}</td>
-                <td className="text-[13px]">{u.roles.map((r) => ROLE_LABEL[r] ?? r).join(" + ")}</td>
-                <td>{u.active ? <span className="chip chip-green">Активен</span> : <span className="chip chip-muted">Отключён</span>}{u.mustChangePassword && <span className="ml-1.5 chip chip-amber">сменит пароль</span>}</td>
-                <td className="text-[13px] text-muted">{fmtDate(u.createdAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="table w-full min-w-[760px]">
+            <thead><tr><th className="text-left">Имя</th><th className="text-left">Email</th><th className="text-left">Роли</th><th className="text-left">Статус</th><th className="text-left">Создан</th></tr></thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td className="font-medium">{u.name}</td>
+                  <td className="mono text-[13px] text-muted">{u.email}</td>
+                  <td className="text-[13px]">{u.roles.map((r) => ROLE_LABEL[r] ?? r).join(" + ")}</td>
+                  <td>{u.active ? <span className="chip chip-green">Активен</span> : <span className="chip chip-muted">Отключён</span>}{u.mustChangePassword && <span className="ml-1.5 chip chip-amber">сменит пароль</span>}</td>
+                  <td className="text-[13px] text-muted">{fmtDate(u.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <p className="mt-3 text-[12px] text-muted">Создание и изменение пользователей выполняется скриптом <span className="mono">prisma/seed-users.mjs</span>. UI управления учётными записями — в бэклоге.</p>
       </section>
 

@@ -47,8 +47,8 @@ export function TaskForm({
     <form action={action} className="flex flex-col gap-5">
       {warrantyCaseId && <input type="hidden" name="warrantyCaseId" value={warrantyCaseId} />}
       <section className="panel p-5">
-        <div className="grid grid-cols-4 gap-4">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="sm:col-span-2">
             <label className="label" htmlFor="title">Название *</label>
             <input id="title" name="title" required defaultValue={defaults.title} className="field" placeholder="Перезвонить Thomas по Golf" />
           </div>

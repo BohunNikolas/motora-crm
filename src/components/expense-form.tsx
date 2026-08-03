@@ -63,8 +63,8 @@ export function ExpenseForm({
       {warrantyCaseId && <input type="hidden" name="warrantyCaseId" value={warrantyCaseId} />}
       <section className="panel p-5">
         <h2 className="mb-4 text-[15px] font-bold">Расход</h2>
-        <div className="grid grid-cols-4 gap-4">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="sm:col-span-2">
             <label className="label" htmlFor="title">Название *</label>
             <input id="title" name="title" required defaultValue={defaults.title} className="field" placeholder="Замена тормозных колодок" />
           </div>
@@ -107,7 +107,7 @@ export function ExpenseForm({
 
       <section className="panel p-5">
         <h2 className="mb-4 text-[15px] font-bold">Счёт и оплата</h2>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div>
             <label className="label" htmlFor="supplier">Поставщик</label>
             <input id="supplier" name="supplier" defaultValue={defaults.supplier} className="field" />

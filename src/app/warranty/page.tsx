@@ -75,12 +75,12 @@ export default async function WarrantyPage({ searchParams }: { searchParams: Pro
       <form className="panel animate-in mb-5 flex flex-wrap items-end gap-3 p-4" method="get">
         {sp.status && <input type="hidden" name="status" value={sp.status} />}
         {sp.open && <input type="hidden" name="open" value={sp.open} />}
-        <div><label className="label">Ответственный</label>
-          <select name="responsibleUserId" defaultValue={sp.responsibleUserId ?? ""} className="field w-[160px]">
+        <div className="w-full sm:w-auto"><label className="label">Ответственный</label>
+          <select name="responsibleUserId" defaultValue={sp.responsibleUserId ?? ""} className="field w-full sm:w-[160px]">
             <option value="">все</option>{users.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
           </select></div>
-        <div><label className="label">Авто</label>
-          <select name="carId" defaultValue={sp.carId ?? ""} className="field w-[210px]">
+        <div className="w-full sm:w-auto"><label className="label">Авто</label>
+          <select name="carId" defaultValue={sp.carId ?? ""} className="field w-full sm:w-[210px]">
             <option value="">все</option>{soldCars.map((c) => (<option key={c.id} value={c.id}>{internalCode(c)} {c.make} {c.model}</option>))}
           </select></div>
         <div className="flex gap-2">
@@ -89,14 +89,14 @@ export default async function WarrantyPage({ searchParams }: { searchParams: Pro
         </div>
       </form>
 
-      <div className="panel animate-in p-0">
+      <div className="panel animate-in overflow-x-auto p-0">
         {cases.length === 0 ? (
           <div className="px-5 py-12 text-center">
             <p className="text-[15px] font-semibold">Случаев нет</p>
             <p className="mx-auto mt-1.5 max-w-[380px] text-sm text-muted">По выбранным условиям гарантийных случаев не найдено.</p>
           </div>
         ) : (
-          <table className="table w-full">
+          <table className="table w-full min-w-[980px]">
             <thead><tr>
               <th className="text-left">Открыт</th><th className="text-left">Автомобиль</th><th className="text-left">Жалоба</th>
               <th className="text-left">Клиент</th><th className="text-left">Ответственный</th><th className="text-left">Задачи/Расходы</th><th className="text-left">Статус</th>

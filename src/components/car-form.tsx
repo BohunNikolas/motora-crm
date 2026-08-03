@@ -65,7 +65,7 @@ export function CarForm({
       {/* ── Основные данные (§8.1) ─────────────────────────── */}
       <section className="panel p-5">
         <h2 className="mb-4 text-[15px] font-bold">Основные данные</h2>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div>
             <label className="label" htmlFor="make">Marke *</label>
             <input id="make" name="make" required defaultValue={v("make", car?.make ?? "")} className="field" placeholder="Volkswagen" />
@@ -163,7 +163,7 @@ export function CarForm({
       {/* ── Serviceheft (§8.2): детальные поля только когда книга есть (В7) ── */}
       <section className="panel p-5">
         <h2 className="mb-4 text-[15px] font-bold">Serviceheft</h2>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div>
             <label className="label" htmlFor="serviceheft">Сервисная книга *</label>
             <select id="serviceheft" name="serviceheft" value={heft} onChange={(e) => setHeft(e.target.value)} className="field">
@@ -191,8 +191,8 @@ export function CarForm({
 
       {/* ── Nachlackierungen (§8.3): чекбоксы активны только при «Да» (В7) ── */}
       <section className="panel p-5">
-        <div className="mb-4 flex items-end justify-between gap-4">
-          <div className="w-[220px]">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+          <div className="w-full sm:w-[220px]">
             <label className="label" htmlFor="nachlackierungen">Nachlackierungen (перекрасы) *</label>
             <select id="nachlackierungen" name="nachlackierungen" value={nach} onChange={(e) => setNach(e.target.value)} className="field">
               {Object.entries(JA_NEIN_UNBEKANNT).map(([k, val]) => (<option key={k} value={k}>{val}</option>))}
@@ -202,7 +202,7 @@ export function CarForm({
             {nach === "JA" ? "Отметьте перекрашенные части." : "Части доступны только при «Да»."}
           </p>
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
           {BODY_PARTS.map((p) => (
             <label key={p.key} className={`flex items-center gap-2 rounded-md border border-line bg-surface-2 px-2.5 py-1.5 text-[13px] ${nach !== "JA" ? "opacity-45" : ""}`}>
               <input type="checkbox" name="nachlackierungenParts" value={p.key} disabled={nach !== "JA"} defaultChecked={parts.includes(p.key)} />
@@ -217,7 +217,7 @@ export function CarForm({
       <section className="panel p-5">
         <h2 className="mb-1 text-[15px] font-bold">Pickerl (§57a)</h2>
         <p className="mb-4 text-[13px] text-muted">Если Pickerl есть — месяц и год Begutachtung обязательны.</p>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div>
             <label className="label" htmlFor="pickerlVorhanden">Pickerl vorhanden *</label>
             <select id="pickerlVorhanden" name="pickerlVorhanden" value={pickerl} onChange={(e) => setPickerl(e.target.value)} className="field">

@@ -138,20 +138,20 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       <form className="panel animate-in mb-5 flex flex-wrap items-end gap-3 p-4" method="get">
         <input type="hidden" name="view" value={view} />
         {sp.date && <input type="hidden" name="date" value={sp.date} />}
-        <div><label className="label">Сотрудник</label>
-          <select name="employeeId" defaultValue={sp.employeeId ?? ""} className="field w-[150px]">
+        <div className="w-full sm:w-auto"><label className="label">Сотрудник</label>
+          <select name="employeeId" defaultValue={sp.employeeId ?? ""} className="field w-full sm:w-[150px]">
             <option value="">все</option>{users.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
           </select></div>
-        <div><label className="label">Авто</label>
-          <select name="carId" defaultValue={sp.carId ?? ""} className="field w-[190px]">
+        <div className="w-full sm:w-auto"><label className="label">Авто</label>
+          <select name="carId" defaultValue={sp.carId ?? ""} className="field w-full sm:w-[190px]">
             <option value="">все</option>{cars.map((c) => (<option key={c.id} value={c.id}>{internalCode(c)} {c.make} {c.model}</option>))}
           </select></div>
-        <div><label className="label">Тип</label>
-          <select name="type" defaultValue={sp.type ?? ""} className="field w-[140px]">
+        <div className="w-full sm:w-auto"><label className="label">Тип</label>
+          <select name="type" defaultValue={sp.type ?? ""} className="field w-full sm:w-[140px]">
             <option value="">все</option>{APPOINTMENT_TYPE_ORDER.map((k) => (<option key={k} value={k}>{APPOINTMENT_TYPE[k]}</option>))}
           </select></div>
-        <div><label className="label">Статус</label>
-          <select name="status" defaultValue={sp.status ?? ""} className="field w-[150px]">
+        <div className="w-full sm:w-auto"><label className="label">Статус</label>
+          <select name="status" defaultValue={sp.status ?? ""} className="field w-full sm:w-[150px]">
             <option value="">все</option>{APPOINTMENT_STATUS_ORDER.map((k) => (<option key={k} value={k}>{APPOINTMENT_STATUS[k].label}</option>))}
           </select></div>
         <div className="flex gap-2">
@@ -162,11 +162,11 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
       {/* Представление */}
       {view === "month" && (
-        <div className="panel animate-in overflow-hidden p-0">
-          <div className="grid grid-cols-7 border-b border-line">
+        <div className="panel animate-in overflow-x-auto p-0">
+          <div className="grid min-w-[700px] grid-cols-7 border-b border-line">
             {WEEKDAYS_SHORT.map((w) => (<div key={w} className="px-2 py-2 text-center text-[11px] font-bold uppercase tracking-wider text-muted">{w}</div>))}
           </div>
-          <div className="grid grid-cols-7">
+          <div className="grid min-w-[700px] grid-cols-7">
             {Array.from({ length: 42 }, (_, i) => {
               const day = addDays(rangeStart, i);
               const k = ymd(day);
@@ -218,14 +218,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       )}
 
       {(view === "day" || view === "list") && (
-        <div className="panel animate-in p-0">
+        <div className="panel animate-in overflow-x-auto p-0">
           {appts.length === 0 ? (
             <div className="px-5 py-12 text-center">
               <p className="text-[15px] font-semibold">Терминов нет</p>
               <p className="mx-auto mt-1.5 max-w-[380px] text-sm text-muted">На выбранный период записей не найдено.</p>
             </div>
           ) : (
-            <table className="table w-full">
+            <table className="table w-full min-w-[860px]">
               <thead><tr>
                 <th className="text-left">Дата</th><th className="text-left">Время</th><th className="text-left">Клиент</th>
                 <th className="text-left">Тип</th><th className="text-left">Авто</th><th className="text-left">Сотрудник</th><th className="text-left">Статус</th>

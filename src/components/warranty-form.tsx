@@ -38,8 +38,8 @@ export function WarrantyForm({
     <form action={action} className="flex flex-col gap-5">
       <section className="panel p-5">
         <h2 className="mb-4 text-[15px] font-bold">Жалоба</h2>
-        <div className="grid grid-cols-4 gap-4">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="sm:col-span-2">
             <label className="label" htmlFor="carId">Проданный автомобиль *</label>
             {lockCar ? (
               <>
@@ -64,7 +64,7 @@ export function WarrantyForm({
             <label className="label" htmlFor="clientReportedAt">Дата обращения</label>
             <input id="clientReportedAt" name="clientReportedAt" type="date" defaultValue={defaults.clientReportedAt} className="field" />
           </div>
-          <div className="col-span-4">
+          <div className="sm:col-span-2 xl:col-span-4">
             <label className="label" htmlFor="complaintDescription">Описание жалобы *</label>
             <textarea id="complaintDescription" name="complaintDescription" required rows={2} defaultValue={defaults.complaintDescription} className="field resize-y" placeholder="Что не так с автомобилем со слов клиента" />
           </div>
@@ -73,8 +73,8 @@ export function WarrantyForm({
 
       <section className="panel p-5">
         <h2 className="mb-4 text-[15px] font-bold">Обработка</h2>
-        <div className="grid grid-cols-4 gap-4">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="sm:col-span-2">
             <label className="label" htmlFor="responsibleUserId">Ответственный</label>
             <select id="responsibleUserId" name="responsibleUserId" defaultValue={defaults.responsibleUserId} className="field">
               <option value="">— не назначен —</option>
@@ -89,11 +89,11 @@ export function WarrantyForm({
             <label className="label" htmlFor="deadline">Срок</label>
             <input id="deadline" name="deadline" type="date" defaultValue={defaults.deadline} className="field" />
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <label className="label" htmlFor="diagnosis">Диагноз</label>
             <textarea id="diagnosis" name="diagnosis" rows={2} defaultValue={defaults.diagnosis} className="field resize-y" />
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <label className="label" htmlFor="decision">Решение</label>
             <textarea id="decision" name="decision" rows={2} defaultValue={defaults.decision} className="field resize-y" placeholder="Ремонт по гарантии / частично / отказ и т.п." />
           </div>
@@ -101,7 +101,7 @@ export function WarrantyForm({
             <label className="label" htmlFor="finalCost">Итоговая стоимость €</label>
             <input id="finalCost" name="finalCost" type="number" step="0.01" min={0} defaultValue={defaults.finalCost} className="field mono" />
           </div>
-          <div className="col-span-3">
+          <div className="sm:col-span-2 xl:col-span-3">
             <label className="label" htmlFor="communicationNotes">Заметки по коммуникации</label>
             <textarea id="communicationNotes" name="communicationNotes" rows={2} defaultValue={defaults.communicationNotes} className="field resize-y" placeholder="Договорённости с клиентом, звонки" />
           </div>

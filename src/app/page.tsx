@@ -104,7 +104,7 @@ export default async function Dashboard() {
 
   return (
     <div>
-      <header className="animate-in mb-7 flex items-end justify-between">
+      <header className="animate-in mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">Обзор</h1>
           <p className="mt-1 text-sm text-muted">{new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Vienna" })}</p>
@@ -116,7 +116,7 @@ export default async function Dashboard() {
       </header>
 
       {/* §5.2 KPI */}
-      <div className={`mb-4 grid gap-4 ${stats.length >= 5 ? "grid-cols-5" : stats.length === 4 ? "grid-cols-4" : stats.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+      <div className={`mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 ${stats.length >= 5 ? "xl:grid-cols-5" : stats.length === 4 ? "xl:grid-cols-4" : stats.length === 3 ? "xl:grid-cols-3" : "xl:grid-cols-2"}`}>
         {stats.map((s, i) => {
           const inner = (
             <>
@@ -147,7 +147,7 @@ export default async function Dashboard() {
       </div>
 
       {/* §5.4 просмотры + задачи */}
-      <div className="mb-6 grid grid-cols-2 gap-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="panel animate-in delay-3 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-[15px] font-bold">Ближайшие просмотры</h2>

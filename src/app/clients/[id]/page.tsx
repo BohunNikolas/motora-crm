@@ -59,7 +59,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     <div>
       <header className="animate-in mb-6">
         <Link href="/clients" className="text-[13px] font-semibold text-muted hover:text-ink">← Клиенты</Link>
-        <div className="mt-2 flex items-start justify-between gap-4">
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-[family-name:var(--font-unbounded)] text-[26px] font-bold">{client.name}</h1>
             <div className="mt-2 flex items-center gap-3">
@@ -78,11 +78,11 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
         </div>
       </header>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2 flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="flex flex-col gap-4 lg:col-span-2">
           <section className="panel animate-in delay-1 p-5">
             <h2 className="mb-4 text-[15px] font-bold">Контакты</h2>
-            <dl className="grid grid-cols-4 gap-y-4">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3 xl:grid-cols-4">
               {contacts.map(([k, v]) => (<div key={k}><dt className="label mb-1">{k}</dt><dd className="text-[14px]">{v}</dd></div>))}
             </dl>
             {client.notes && (
