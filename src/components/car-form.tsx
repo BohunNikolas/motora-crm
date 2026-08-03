@@ -75,7 +75,9 @@ export function CarForm({
             <input id="model" name="model" required defaultValue={v("model", car?.model ?? "")} className="field" placeholder="Golf" />
           </div>
           <div>
-            <label className="label" htmlFor="erstzulassung">Постановка на учёт (Erstzulassung) *</label>
+            {/* Подпись как у соседей — немецкий термин: длинное «Постановка на учёт
+                (Erstzulassung)» ломалось на две строки и рвало ряд полей. */}
+            <label className="label" htmlFor="erstzulassung" title="Дата первой постановки на учёт">Erstzulassung *</label>
             <input id="erstzulassung" name="erstzulassung" type="date" required defaultValue={v("erstzulassung", dstr(car?.erstzulassung))} className="field" />
           </div>
           <div>
@@ -192,7 +194,7 @@ export function CarForm({
       {/* ── Nachlackierungen (§8.3): чекбоксы активны только при «Да» (В7) ── */}
       <section className="panel p-5">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-          <div className="w-full sm:w-[220px]">
+          <div className="w-full sm:w-[280px]">
             <label className="label" htmlFor="nachlackierungen">Nachlackierungen (перекрасы) *</label>
             <select id="nachlackierungen" name="nachlackierungen" value={nach} onChange={(e) => setNach(e.target.value)} className="field">
               {Object.entries(JA_NEIN_UNBEKANNT).map(([k, val]) => (<option key={k} value={k}>{val}</option>))}
