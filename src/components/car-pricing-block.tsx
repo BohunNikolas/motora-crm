@@ -9,6 +9,7 @@ import {
   TAX_SCHEME_ORDER,
   isPartnerOwner,
 } from "@/lib/format";
+import { MARKUP_RULE_HINT, suggestedMarkupJs } from "@/lib/pricing-shared";
 
 /**
  * Ценовой блок формы авто (правки-1, П14): владелец × канал × налоговый режим
@@ -22,6 +23,11 @@ import {
  *  - аукционный сбор = цена аукциона − цена автомобиля;
  *  - дифф. НДС = (план − база) × 0.2; база: Аукцион — цена автомобиля, иначе финальная;
  *  - Regel: НДС = нетто × 0.2, брутто = нетто + НДС.
+ *
+ * Правки-2 (docs/TZ-DUAL-DIFF-VAT.md): у партнёрских владельцев на Differenz
+ * показываются обе ступени НДС (e.U. → OG → клиент), передаточная цена и
+ * сквозная маржа группы; наценка автозаполняется suggestedMarkupJs, пока её
+ * не правили руками.
  */
 export type PricingDefaults = {
   currentOwner: string;
@@ -56,6 +62,8 @@ export function CarPricingBlock({ defaults }: { defaults: PricingDefaults }) {
   const [aVehicle, setAVehicle] = useState(defaults.auctionVehiclePrice);
   const [aTransport, setATransport] = useState(defaults.auctionTransportCost);
   const [markup, setMarkup] = useState(defaults.fictitiousMarkup);
+  // Наценку правили руками — авторасчёт больше её не перетирает (правки-2).
+  const [markupDirty, setMarkupDirty] = useState(defaults.fictitiousMarkup !== "");
   const [planGross, setPlanGross] = useState(defaults.plannedSalePriceGross);
   const [planNet, setPlanNet] = useState(defaults.plannedSalePriceNet);
 
@@ -64,16 +72,30 @@ export function CarPricingBlock({ defaults }: { defaults: PricingDefaults }) {
   const isRegel = scheme === "REGELBESTEUERUNG";
 
   // Live-расчёт (дублирует finance.ts только для показа).
-  const markupN = partner ? num(markup) : 0;
-  const finalPurchase = isAuction
-    ? num(aTotal) + num(aTransport) + markupN
-    : num(purchase) + markupN;
+  const realCost = isAuction ? num(aTotal) + num(aTransport) : num(purchase);
+  // Пока наценку не трогали руками — показываем и отправляем авторасчёт.
+  const autoMarkup = suggestedMarkupJs(realCost);
+  const markupValue = markupDirty ? markup : realCost > 0 ? String(autoMarkup) : "";
+  const markupN = partner ? num(markupValue) : 0;
+  const finalPurchase = realCost + markupN;
   const auctionFee = num(aTotal) - num(aVehicle);
   const regelVat = num(planNet) * 0.2;
   const regelGross = num(planNet) + regelVat;
   const planForVat = isRegel ? regelGross : num(planGross);
+
+  // Одна ступень (MOTORHOF или Regel) — как прежде.
   const vatBase = isAuction ? num(aVehicle) : finalPurchase;
   const diffVat = Math.max(0, planForVat - vatBase) * 0.2;
+
+  // Две ступени (партнёр + Differenz): НДС e.U. переложен в передаточную цену,
+  // НДС OG считается от неё, маржа — сквозная по группе.
+  const twoStage = partner && !isRegel;
+  const vehicleBase = isAuction ? num(aVehicle) : num(purchase);
+  const vatEU = Math.max(0, finalPurchase - vehicleBase) * 0.2;
+  const transferPrice = finalPurchase + vatEU;
+  const vatOG = Math.max(0, planForVat - transferPrice) * 0.2;
+  const vatTotal = vatEU + vatOG;
+  const groupMargin = planForVat - vatTotal - realCost;
 
   return (
     <section className="panel p-5">
@@ -149,8 +171,34 @@ export function CarPricingBlock({ defaults }: { defaults: PricingDefaults }) {
         )}
         {partner && (
           <div>
-            <label className="label" htmlFor="fictitiousMarkup">Фиктивная наценка * €</label>
-            <input id="fictitiousMarkup" name="fictitiousMarkup" type="number" step="0.01" min={0} required value={markup} onChange={(e) => setMarkup(e.target.value)} className="field mono" placeholder="0" />
+            <div className="flex items-baseline justify-between gap-2">
+              <label className="label" htmlFor="fictitiousMarkup">Фиктивная наценка * €</label>
+              {markupDirty && (
+                <button
+                  type="button"
+                  onClick={() => { setMarkupDirty(false); setMarkup(""); }}
+                  className="text-[11px] font-semibold text-muted transition-colors hover:text-accent"
+                  title={MARKUP_RULE_HINT}
+                >
+                  ↺ авто
+                </button>
+              )}
+            </div>
+            <input
+              id="fictitiousMarkup"
+              name="fictitiousMarkup"
+              type="number"
+              step="0.01"
+              min={0}
+              required
+              value={markupValue}
+              onChange={(e) => { setMarkupDirty(true); setMarkup(e.target.value); }}
+              className="field mono"
+              placeholder="0"
+            />
+            <p className="mt-1 text-[11px] text-muted">
+              {markupDirty ? "введено вручную" : MARKUP_RULE_HINT}
+            </p>
           </div>
         )}
 
@@ -186,13 +234,53 @@ export function CarPricingBlock({ defaults }: { defaults: PricingDefaults }) {
           <span className="label">Финальная закупочная (расчёт)</span>
           <div className="field mono flex items-center bg-surface-2 text-muted">{eur.format(finalPurchase)}</div>
         </div>
-        {!isRegel && (
+        {!isRegel && !twoStage && (
           <div>
             <span className="label">Дифф. НДС (расчёт)</span>
             <div className="field mono flex items-center bg-surface-2 text-muted">{eur.format(diffVat)}</div>
           </div>
         )}
       </div>
+
+      {/* Две ступени НДС — только партнёрское авто на Differenz (правки-2). */}
+      {twoStage && (
+        <div className="mt-4 rounded-lg border border-line bg-surface-2 p-4">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h3 className="text-[13px] font-bold">Расчёт по двум ступеням</h3>
+            <span className="text-[11px] text-muted">e.U. → MOTORHOF → клиент</span>
+          </div>
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Реальная закупка</dt>
+              <dd className="mono">{eur.format(realCost)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Дифф. НДС · ступень e.U.</dt>
+              <dd className="mono">{eur.format(vatEU)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Внутренний счёт e.U. → OG</dt>
+              <dd className="mono">{eur.format(transferPrice)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Дифф. НДС · ступень OG</dt>
+              <dd className="mono">{eur.format(vatOG)}</dd>
+            </div>
+            <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold sm:col-span-2">
+              <dt>НДС всего</dt>
+              <dd className="mono">{eur.format(vatTotal)}</dd>
+            </div>
+            <div className="flex justify-between gap-3 font-bold sm:col-span-2">
+              <dt>Маржа группы (без расходов)</dt>
+              <dd className={`mono ${groupMargin < 0 ? "text-red" : ""}`}>{eur.format(groupMargin)}</dd>
+            </div>
+          </dl>
+          <p className="mt-2 text-[11px] text-muted">
+            Наценка остаётся внутри группы и в марже не вычитается; расходы по авто
+            учитываются на карточке после сохранения.
+          </p>
+        </div>
+      )}
 
       {/* Аукцион: gesamt < цены автомобиля — только с override и причиной (§11.2). */}
       {isAuction && (

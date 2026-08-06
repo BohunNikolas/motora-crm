@@ -33,19 +33,20 @@ export const Decimal = Prisma.Decimal;
 export type Dec = Prisma.Decimal;
 export type Money = Prisma.Decimal | number | string;
 
-/** Ставка НДС по умолчанию, % (хранение в настройке — позже). */
-export const VAT_RATE_DEFAULT = 20;
-
-/**
- * Автоподбор фиктивной наценки e.U. (правки-2): процент от реальной закупки,
- * но не ниже пола, с округлением вверх до шага. Процент — «трейдерский интерес»
- * между независимыми компаниями (Fremdvergleich), пол — чтобы на дешёвых лотах
- * наценка не выглядела символической. Значение подставляется в форму и остаётся
- * редактируемым.
- */
-export const MARKUP_RATE_PCT = 5;
-export const MARKUP_MIN = 250;
-export const MARKUP_ROUND_STEP = 10;
+// Ставка и правила автонаценки живут в pricing-shared.ts (модуль без Prisma —
+// его же импортирует клиентская форма, чтобы подсказки совпадали с сервером).
+export {
+  VAT_RATE_DEFAULT,
+  MARKUP_RATE_PCT,
+  MARKUP_MIN,
+  MARKUP_ROUND_STEP,
+} from "./pricing-shared";
+import {
+  VAT_RATE_DEFAULT,
+  MARKUP_RATE_PCT,
+  MARKUP_MIN,
+  MARKUP_ROUND_STEP,
+} from "./pricing-shared";
 
 export const dec = (v: Money): Dec => new Decimal(v);
 
