@@ -250,6 +250,40 @@ describe("Бронь и продажа §18 (snapshot и просрочка бр
     expect(s.isConfirmed).toBe(true);
   });
 
+  it("snapshot партнёрского авто замораживает обе ступени (правки-2)", () => {
+    // Fiat 500 из ТЗ: аукцион 2740 + транспорт 186.65, наценка 300, продажа 4990.
+    const s = buildSaleSnapshot(
+      car({
+        currentOwner: "MRIYA_MOTORS",
+        purchaseChannel: "AUKTION",
+        auctionInvoiceTotal: D(2740),
+        auctionVehiclePrice: D(2272),
+        auctionTransportCost: new Decimal("186.65"),
+        fictitiousMarkup: D(300),
+        expenses: [
+          { amountGross: D(750), alreadyIncludedInAcquisitionCost: false, approvalStatus: "APPROVED" },
+        ],
+      }),
+      D(4990)
+    );
+    expect(s.isTwoStage).toBe(true);
+    expect(s.vatEU).toBe("190.93");
+    expect(s.vatOG).toBe("314.48");
+    expect(s.transferPrice).toBe("3417.58");
+    expect(s.vatAmount).toBe("505.41");
+    expect(s.realCost).toBe("2926.65");
+    expect(s.acquisitionBasis).toBe("2926.65"); // реальная закупка, без наценки
+    expect(s.cost).toBe("3676.65"); // + расходы 750
+    expect(s.finalMargin).toBe("807.94");
+  });
+
+  it("snapshot авто MOTORHOF не содержит полей ступеней", () => {
+    const s = buildSaleSnapshot(car(), D(12000));
+    expect(s.isTwoStage).toBeUndefined();
+    expect(s.vatEU).toBeUndefined();
+    expect(s.transferPrice).toBeUndefined();
+  });
+
   it("snapshot Аукциона: финальная = total (+транспорт), НДС от цены автомобиля", () => {
     const s = buildSaleSnapshot(
       car({ purchaseChannel: "AUKTION", auctionVehiclePrice: D(10000), auctionInvoiceTotal: D(10800) }),

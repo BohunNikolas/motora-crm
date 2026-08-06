@@ -166,6 +166,13 @@ export const carFinalPurchase = (car: CarForFinance): Dec => carPricing(car).fin
 export const carRealCost = (car: CarForFinance): Dec => carPricing(car).realCost;
 
 /**
+ * База приобретения для списков и итогов склада: у партнёрских авто — реальная
+ * закупка, у остальных — финальная закупочная (совпадает с себестоимостью минус
+ * расходы, поэтому суммы по складу сходятся с маржой).
+ */
+export const carAcquisitionBase = (car: CarForFinance): Dec => carPricing(car).costBasis;
+
+/**
  * Себестоимость: база приобретения + подтверждённые расходы, не входящие в неё.
  * База — costBasis из расчёта: у партнёрских авто это реальная закупка (наценка
  * остаётся внутри группы), у остальных — финальная закупочная.
@@ -214,20 +221,38 @@ export type SaleSnapshot = {
   marginBeforeExpenses: string;
   finalMargin: string;
   isConfirmed: boolean;
+  // Партнёрские авто (правки-2). У старых продаж этих полей нет — читатели
+  // должны считать их необязательными.
+  isTwoStage?: boolean;
+  vatEU?: string;
+  vatOG?: string;
+  transferPrice?: string;
+  realCost?: string;
 };
 
 export function buildSaleSnapshot(car: CarForFinance, salePriceGross: Num): SaleSnapshot {
-  const fin = carActualFinance(car, salePriceGross);
+  const pricing = carPricingAt(car, salePriceGross);
+  const fin = toVehicleFinanceResult(pricing);
   return {
     taxScheme: fin.taxScheme,
     vatLabel: car.taxScheme === "REGELBESTEUERUNG" ? "Ausgangs-USt" : "Differenz-USt",
-    acquisitionBasis: carFinalPurchase(car).toString(),
+    // База приобретения: у партнёрских — реальная закупка (наценка внутри группы).
+    acquisitionBasis: pricing.costBasis.toString(),
     salePriceGross: dec(salePriceGross).toString(),
     vatAmount: fin.vatAmount.toString(),
     cost: carCost(car).toString(),
     marginBeforeExpenses: fin.marginBeforeExpenses.toString(),
     finalMargin: fin.finalMargin.toString(),
     isConfirmed: fin.isConfirmed,
+    ...(pricing.isTwoStage
+      ? {
+          isTwoStage: true,
+          vatEU: pricing.vatEU!.toString(),
+          vatOG: pricing.vatOG!.toString(),
+          transferPrice: pricing.transferPrice!.toString(),
+          realCost: pricing.realCost.toString(),
+        }
+      : {}),
   };
 }
 
