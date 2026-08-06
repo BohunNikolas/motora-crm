@@ -110,6 +110,12 @@ export type CarForFinance = {
 const pricingChannel = (channel: string | null): PricingChannel =>
   channel === "AUKTION" || channel === "HAENDLER" ? channel : "PRIVAT";
 
+// Три партнёрские компании (e.U.) поставляют авто в MOTORHOF OG. Признак нужен
+// уже в расчёте цен (двухступенчатый НДС, правки-2), поэтому объявлен здесь.
+export const PARTNER_OWNERS = ["MRIYA_MOTORS", "A_MOTORS", "AUTOHUB"] as const;
+export const isPartnerOwner = (owner: string): boolean =>
+  (PARTNER_OWNERS as readonly string[]).includes(owner);
+
 /**
  * Год авто (В5): выводится из даты постановки на учёт (Erstzulassung);
  * фолбэк — легаси-поле year у старых записей. null → «—» в UI.
@@ -142,6 +148,8 @@ export const carPricingAt = (car: CarForFinance, saleGross: Num | null): Pricing
     auctionVehiclePrice: car.auctionVehiclePrice,
     transportCost: car.auctionTransportCost,
     fictitiousMarkup: car.fictitiousMarkup ?? null,
+    // Партнёрское авто на Differenz считается двумя ступенями НДС (правки-2).
+    isPartner: isPartnerOwner(car.currentOwner),
     plannedSalePriceGross: plannedGross,
     plannedSalePriceNet: plannedNet,
     expenses: approvedOnly(car.expenses).map((e) => ({
@@ -154,12 +162,19 @@ export const carPricingAt = (car: CarForFinance, saleGross: Num | null): Pricing
 /** Финальная закупочная цена авто (правки-1). */
 export const carFinalPurchase = (car: CarForFinance): Dec => carPricing(car).finalPurchasePrice;
 
-/** Себестоимость: финальная закупочная + подтверждённые расходы, не входящие в неё. */
+/** Реально уплаченные за авто деньги, без фиктивной наценки (правки-2). */
+export const carRealCost = (car: CarForFinance): Dec => carPricing(car).realCost;
+
+/**
+ * Себестоимость: база приобретения + подтверждённые расходы, не входящие в неё.
+ * База — costBasis из расчёта: у партнёрских авто это реальная закупка (наценка
+ * остаётся внутри группы), у остальных — финальная закупочная.
+ */
 export const carCost = (car: CarForFinance): Dec =>
   round2(
     approvedOnly(car.expenses)
       .filter((e) => !e.alreadyIncludedInAcquisitionCost)
-      .reduce((s, e) => s.plus(dec(e.amountGross)), carFinalPurchase(car))
+      .reduce((s, e) => s.plus(dec(e.amountGross)), carPricing(car).costBasis)
   );
 
 /** Плановая финансовая картина (легаси-форма результата для карточки/снапшота). */
@@ -184,14 +199,6 @@ export const markupPct = (car: CarForFinance): number => {
   const cost = carCost(car);
   return cost.gt(0) ? Math.round(carMargin(car).div(cost).times(100).toNumber()) : 0;
 };
-
-// ─── Владелец и внутренняя продажа e.U. → OG (§9) ────────────────
-// Три партнёрские компании поставляют авто в MOTORHOF OG через внутренний счёт.
-// Результаты поставщика и OG считаются РАЗДЕЛЬНО и не смешиваются.
-
-export const PARTNER_OWNERS = ["MRIYA_MOTORS", "A_MOTORS", "AUTOHUB"] as const;
-export const isPartnerOwner = (owner: string): boolean =>
-  (PARTNER_OWNERS as readonly string[]).includes(owner);
 
 // ─── Financial snapshot продажи (§18.2) ─────────────────────────
 // Замораживает финрасчёт на момент продажи: смена настроек ставки/цен позже

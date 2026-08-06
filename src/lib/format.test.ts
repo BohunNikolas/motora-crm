@@ -152,11 +152,24 @@ describe("Ценообразование по владельцу — фикти�
     ).toBe("10000");
   });
 
-  it("маржа партнёрского авто: наценка уменьшает и НДС-базу, и маржу", () => {
-    // закупка 9000 + наценка 1000 = финальная 10000; план 15000
-    // НДС = (15000−10000)×0.2 = 1000; маржа = 15000−1000−10000 = 4000
-    const m = carMargin(car({ currentOwner: "MRIYA_MOTORS", fictitiousMarkup: D(1000) }));
-    expect(m.toString()).toBe("4000");
+  it("маржа партнёрского авто — сквозная по группе, две ступени НДС (правки-2)", () => {
+    // закупка 9000 + наценка 1000 = финальная 10000;
+    // ступень 1: НДС e.U. = (10000−9000)×0.2 = 200 → передаточная 10200;
+    // ступень 2: НДС OG = (15000−10200)×0.2 = 960; НДС всего 1160;
+    // маржа группы = 15000 − 1160 − 9000 (реальная закупка, наценка внутри группы).
+    const partner = car({ currentOwner: "MRIYA_MOTORS", fictitiousMarkup: D(1000) });
+    expect(carMargin(partner).toString()).toBe("4840");
+    const p = carPricing(partner);
+    expect(p.vatEU?.toString()).toBe("200");
+    expect(p.transferPrice?.toString()).toBe("10200");
+    expect(p.realCost.toString()).toBe("9000");
+  });
+
+  it("себестоимость партнёрского авто считается от реальной закупки, без наценки", () => {
+    const partner = car({ currentOwner: "MRIYA_MOTORS", fictitiousMarkup: D(1000) });
+    expect(carCost(partner).toString()).toBe("9000");
+    // у MOTORHOF наценки нет — база прежняя
+    expect(carCost(car()).toString()).toBe("9000");
   });
 });
 

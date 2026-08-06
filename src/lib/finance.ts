@@ -11,6 +11,16 @@
  *  - маржа (Diff)  = план − дифф.НДС − финальная закупочная − расходы;
  *    маржа (Regel) = брутто − финальная закупочная − расходы (В10).
  *
+ * Правки партии 2 (docs/TZ-DUAL-DIFF-VAT.md): для партнёрских владельцев на
+ * Differenzbesteuerung расчёт ДВУХСТУПЕНЧАТЫЙ — авто юридически продаётся дважды
+ * (e.U. → OG → клиент), и Differenz-НДС возникает на каждой ступени:
+ *    ступень 1: НДС e.U. = (финальная закупочная − стоимость автомобиля) × ставка;
+ *               передаточная цена = финальная закупочная + НДС e.U.
+ *               (НДС переложен в цену — чистый заработок e.U. равен наценке);
+ *    ступень 2: НДС OG = max(0, продажа − передаточная) × ставка.
+ * Экономика при этом СКВОЗНАЯ по группе: маржа одна, наценка в ней не участвует
+ * (деньги перетекают внутри группы) и влияет на результат только через НДС.
+ *
  * Правила (Требования §2.6–2.8):
  *  - все суммы — Decimal (decimal.js через Prisma.Decimal), НИКАКОГО JS-float;
  *  - округление до 2 знаков по единому правилу half-up;
@@ -25,6 +35,17 @@ export type Money = Prisma.Decimal | number | string;
 
 /** Ставка НДС по умолчанию, % (хранение в настройке — позже). */
 export const VAT_RATE_DEFAULT = 20;
+
+/**
+ * Автоподбор фиктивной наценки e.U. (правки-2): процент от реальной закупки,
+ * но не ниже пола, с округлением вверх до шага. Процент — «трейдерский интерес»
+ * между независимыми компаниями (Fremdvergleich), пол — чтобы на дешёвых лотах
+ * наценка не выглядела символической. Значение подставляется в форму и остаётся
+ * редактируемым.
+ */
+export const MARKUP_RATE_PCT = 5;
+export const MARKUP_MIN = 250;
+export const MARKUP_ROUND_STEP = 10;
 
 export const dec = (v: Money): Dec => new Decimal(v);
 
@@ -77,6 +98,11 @@ export interface PricingInput {
   transportCost?: Money | null;
   /** Фиктивная наценка — только партнёрские владельцы (AUTOHUB/A-MOTORS/MRIYA). */
   fictitiousMarkup?: Money | null;
+  /**
+   * Владелец — партнёрская компания e.U. (isPartnerOwner в format.ts).
+   * Вместе с Differenzbesteuerung включает двухступенчатый расчёт НДС (правки-2).
+   */
+  isPartner?: boolean;
   /** Diff: плановая цена продажи (brutto). */
   plannedSalePriceGross?: Money | null;
   /** Regel: плановая цена продажи НЕТТО (брутто считается). */
@@ -90,10 +116,25 @@ export interface PricingResult {
   channel: PricingChannel;
   /** Финальная закупочная цена (по формуле канала, с фикт. наценкой у партнёров). */
   finalPurchasePrice: Dec;
+  /** Реальные деньги, уплаченные за авто (закупка + транспорт), БЕЗ фикт. наценки. */
+  realCost: Dec;
+  /**
+   * База себестоимости для сквозной экономики: у двухступенчатых — реальная
+   * закупка (наценка внутри группы), иначе финальная закупочная.
+   */
+  costBasis: Dec;
   /** Аукционный сбор = цена аукциона − цена автомобиля (только AUKTION, иначе null). */
   auctionFee: Dec | null;
-  /** Diff: дифф. НДС ((база)×ставка/100). Regel: НДС = нетто×ставка/100. */
+  /** Diff: дифф. НДС ((база)×ставка/100). Regel: НДС = нетто×ставка/100. У двухступенчатых — сумма ступеней. */
   vatAmount: Dec;
+  /** Двухступенчатый расчёт (партнёрское авто на Differenz) — правки-2. */
+  isTwoStage: boolean;
+  /** Ступень 1: дифф. НДС e.U. с наценки и накладных (null у одноступенчатых). */
+  vatEU: Dec | null;
+  /** Ступень 2: дифф. НДС OG от передаточной цены (null у одноступенчатых). */
+  vatOG: Dec | null;
+  /** Цена внутреннего счёта e.U. → OG = финальная закупочная + НДС e.U. */
+  transferPrice: Dec | null;
   /** Плановая цена продажи brutto (Diff — введена; Regel — нетто + НДС). */
   saleGross: Dec;
   /** Regel: нетто (введено). Diff: null. */
@@ -133,6 +174,44 @@ export function finalPurchasePrice(input: {
 }
 
 /**
+ * Реальная закупка — деньги, фактически уплаченные за авто, без фиктивной
+ * наценки: Приват/Хендлер — закупочная; Аукцион — счёт аукциона + транспорт.
+ */
+export function realAcquisitionCost(input: {
+  channel: PricingChannel;
+  purchasePrice?: Money | null;
+  auctionTotal?: Money | null;
+  transportCost?: Money | null;
+}): Dec {
+  if (input.channel === "AUKTION") {
+    return round2(dec(input.auctionTotal ?? 0).plus(dec(input.transportCost ?? 0)));
+  }
+  return round2(dec(input.purchasePrice ?? 0));
+}
+
+/**
+ * Стоимость самого автомобиля — база, от которой считается дифф. НДС ступени 1:
+ * Аукцион — цена автомобиля из инвойса (сбор и транспорт в неё не входят),
+ * Приват/Хендлер — закупочная цена.
+ */
+export function vehicleBasePrice(input: {
+  channel: PricingChannel;
+  purchasePrice?: Money | null;
+  auctionVehiclePrice?: Money | null;
+}): Dec {
+  return round2(
+    dec((input.channel === "AUKTION" ? input.auctionVehiclePrice : input.purchasePrice) ?? 0)
+  );
+}
+
+/** Автоподбор фиктивной наценки: % от реальной закупки, не ниже пола, вверх до шага. */
+export function suggestedMarkup(realCost: Money): Dec {
+  const pct = dec(realCost).times(MARKUP_RATE_PCT).div(100);
+  const stepped = pct.div(MARKUP_ROUND_STEP).ceil().times(MARKUP_ROUND_STEP);
+  return round2(Decimal.max(MARKUP_MIN, stepped));
+}
+
+/**
  * Дифф. НДС = max(0, база) × ставка/100 (В1: 20% СВЕРХУ разницы).
  * База: Приват/Хендлер — план − финальная закупочная; Аукцион — план − цена автомобиля.
  * Отрицательная база даёт 0 (НДС не бывает отрицательным — прежняя конвенция).
@@ -157,6 +236,7 @@ export function regelVat(saleNet: Money, vatRate: number = VAT_RATE_DEFAULT): { 
 export function computePricing(input: PricingInput): PricingResult {
   const rate = input.vatRate ?? VAT_RATE_DEFAULT;
   const fp = finalPurchasePrice(input);
+  const real = realAcquisitionCost(input);
   const fee =
     input.channel === "AUKTION" && input.auctionTotal != null && input.auctionVehiclePrice != null
       ? auctionFee(input.auctionTotal, input.auctionVehiclePrice)
@@ -172,8 +252,14 @@ export function computePricing(input: PricingInput): PricingResult {
       taxScheme: input.taxScheme,
       channel: input.channel,
       finalPurchasePrice: fp,
+      realCost: real,
+      costBasis: fp,
       auctionFee: fee,
       vatAmount: vat,
+      isTwoStage: false,
+      vatEU: null,
+      vatOG: null,
+      transferPrice: null,
       saleGross: gross,
       saleNet: round2(net),
       additionalExpenses: additional,
@@ -185,6 +271,41 @@ export function computePricing(input: PricingInput): PricingResult {
 
   // Differenzbesteuerung (UNGEKLAERT — легаси, считается так же, но не подтверждён).
   const plan = dec(input.plannedSalePriceGross ?? 0);
+
+  // ── Партнёрское авто: две продажи, два дифф. НДС (правки-2) ──
+  if (input.isPartner) {
+    const vehicleBase = vehicleBasePrice(input);
+    // Ступень 1: база = наценка + накладные (сбор аукциона, транспорт),
+    // т.е. всё, на что финальная закупочная превышает стоимость автомобиля.
+    const vatEU = round2(Decimal.max(0, fp.minus(vehicleBase)).times(rate).div(100));
+    // НДС ступени 1 переложен в цену внутреннего счёта — e.U. остаётся с наценкой.
+    const transfer = round2(fp.plus(vatEU));
+    // Ступень 2: OG «купила» у e.U. по передаточной цене — она и есть база.
+    const vatOG = differenzUst(plan, transfer, rate);
+    const vatTotal = round2(vatEU.plus(vatOG));
+    // Маржа группы: наценка не вычитается — деньги остались внутри группы.
+    const before = round2(plan.minus(vatTotal).minus(real));
+    return {
+      taxScheme: input.taxScheme,
+      channel: input.channel,
+      finalPurchasePrice: fp,
+      realCost: real,
+      costBasis: real,
+      auctionFee: fee,
+      vatAmount: vatTotal,
+      isTwoStage: true,
+      vatEU,
+      vatOG,
+      transferPrice: transfer,
+      saleGross: round2(plan),
+      saleNet: null,
+      additionalExpenses: additional,
+      marginBeforeExpenses: before,
+      finalMargin: round2(before.minus(additional)),
+      isConfirmed: input.taxScheme !== "UNGEKLAERT",
+    };
+  }
+
   const vatBase = input.channel === "AUKTION" ? dec(input.auctionVehiclePrice ?? 0) : fp;
   const ust = differenzUst(plan, vatBase, rate);
   const before = round2(plan.minus(ust).minus(fp));
@@ -192,8 +313,14 @@ export function computePricing(input: PricingInput): PricingResult {
     taxScheme: input.taxScheme,
     channel: input.channel,
     finalPurchasePrice: fp,
+    realCost: real,
+    costBasis: fp,
     auctionFee: fee,
     vatAmount: ust,
+    isTwoStage: false,
+    vatEU: null,
+    vatOG: null,
+    transferPrice: null,
     saleGross: round2(plan),
     saleNet: null,
     additionalExpenses: additional,
