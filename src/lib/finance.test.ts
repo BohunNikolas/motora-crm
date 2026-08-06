@@ -13,6 +13,7 @@ import {
   suggestedMarkup,
   type PricingInput,
 } from "./finance";
+import { suggestedMarkupJs } from "./pricing-shared";
 
 const D = (v: number | string) => new Decimal(v);
 
@@ -350,5 +351,19 @@ describe("Каскадный эффект двух ступеней", () => {
     );
     const saved = one.vatAmount.minus(two.vatAmount);
     expect(saved.toString()).toBe(round2(two.vatEU!.times(0.2)).toString()); // 31.88
+  });
+});
+
+describe("Автонаценка: клиентская и серверная версии совпадают", () => {
+  it("suggestedMarkupJs повторяет Decimal-расчёт на контрольных суммах", () => {
+    for (const cost of [0, 100, 2926.65, 4999, 5000, 5596, 12345.67, 20000]) {
+      expect(suggestedMarkupJs(cost)).toBe(Number(suggestedMarkup(cost).toString()));
+    }
+  });
+
+  it("пол и шаг округления соблюдаются", () => {
+    expect(suggestedMarkupJs(1000)).toBe(250); // 5% = 50 → пол
+    expect(suggestedMarkupJs(5001)).toBe(260); // 250.05 → вверх до 260
+    expect(suggestedMarkupJs(20000)).toBe(1000); // 5% ровно
   });
 });
