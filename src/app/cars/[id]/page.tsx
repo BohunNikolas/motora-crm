@@ -651,13 +651,21 @@ export default async function CarPage({
               <span>{TAX_SCHEME[car.taxScheme] ?? car.taxScheme}</span>
             </div>
             <div className="flex flex-col gap-2.5 text-[14px]">
+              {/* Партнёрское авто (правки-2): база — реально уплаченные деньги,
+                  наценка внутри группы и в себестоимость не входит. */}
               <div className="flex justify-between">
-                <span className="text-muted">Финальная закупочная</span>
-                <span className="mono">{fmtMoney(pricing.finalPurchasePrice)}</span>
+                <span className="text-muted">
+                  {pricing.isTwoStage ? "Реальная закупка" : "Финальная закупочная"}
+                </span>
+                <span className="mono">
+                  {fmtMoney(pricing.isTwoStage ? pricing.realCost : pricing.finalPurchasePrice)}
+                </span>
               </div>
               {seeInternal && isPartner && car.fictitiousMarkup && (
                 <div className="flex justify-between text-[13px]">
-                  <span className="text-muted">в т.ч. фиктивная наценка</span>
+                  <span className="text-muted">
+                    {pricing.isTwoStage ? "Фиктивная наценка e.U." : "в т.ч. фиктивная наценка"}
+                  </span>
                   <span className="mono">{fmtMoney(car.fictitiousMarkup)}</span>
                 </div>
               )}
@@ -690,13 +698,46 @@ export default async function CarPage({
                     <span className="text-muted">Цена продажи (план)</span>
                     <span className="mono">{fmtMoney(pricing.saleGross)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted">Дифф. НДС (20% от разницы)</span>
-                    <span className="mono">− {fmtMoney(pricing.vatAmount)}</span>
-                  </div>
+                  {/* Две ступени видны только с see.internalPrice; остальным —
+                      одна итоговая строка НДС, как и раньше. */}
+                  {pricing.isTwoStage && seeInternal ? (
+                    <>
+                      <div className="flex justify-between text-[13px]">
+                        <span className="text-muted">Дифф. НДС · ступень e.U.</span>
+                        <span className="mono">− {fmtMoney(pricing.vatEU!)}</span>
+                      </div>
+                      <div className="flex justify-between text-[13px]">
+                        <span className="text-muted">Дифф. НДС · ступень MOTORHOF</span>
+                        <span className="mono">− {fmtMoney(pricing.vatOG!)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted">НДС всего</span>
+                        <span className="mono">− {fmtMoney(pricing.vatAmount)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between">
+                      <span className="text-muted">Дифф. НДС (20% от разницы)</span>
+                      <span className="mono">− {fmtMoney(pricing.vatAmount)}</span>
+                    </div>
+                  )}
                 </>
               )}
             </div>
+
+            {/* Справочно: сумма внутреннего счёта, который e.U. выставляет OG. */}
+            {pricing.isTwoStage && seeInternal && pricing.transferPrice && (
+              <div className="mt-3 rounded-lg border border-line bg-surface-2 px-3 py-2.5">
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-muted">Внутренний счёт e.U. → MOTORHOF</span>
+                  <span className="mono font-semibold">{fmtMoney(pricing.transferPrice)}</span>
+                </div>
+                <p className="mt-1 text-[11px] text-muted">
+                  Финальная закупочная {fmtMoney(pricing.finalPurchasePrice)} + дифф. НДС e.U.
+                  {" "}— сумма для счёта по Differenzbesteuerung (§ 24 UStG).
+                </p>
+              </div>
+            )}
 
             <div className="mt-4 rounded-xl border border-line bg-surface-2 p-4">
               <div className="label mb-1">
